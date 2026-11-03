@@ -1,16 +1,26 @@
 {
   "expo": {
-    "name": "TradeMind AI",
-    "slug": "trademind-ai",
+    "name": "TradeMind",
+    "slug": "trademind",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
     "splash": {
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0b1220"
+      "backgroundColor": "#070b14"
     },
     "android": {
-      "package": "com.trademindai.app"
+      "package": "com.trademind.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#070b14"
+      }
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.trademind.app"
     }
   }
 }
