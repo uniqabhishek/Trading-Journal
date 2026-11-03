@@ -77,6 +77,11 @@ export default function App(){
 
   function logout(){localStorage.removeItem('tm_token');setToken(null);setUser(null);setStats(null);setTrades([])}
 
+  function enterDemo(){
+    localStorage.setItem('tm_token','local-demo-token');
+    setToken('local-demo-token');
+  }
+
   if(!token) return <main className="auth-wrap"><form className="auth-card" onSubmit={submitAuth}>
     <div className="brand-mark">TM</div><h1>TradeMind <span>AI</span></h1><p className="muted">Your trading journal and performance workspace</p>
     {authMode==='register' && <input placeholder="Full name" value={auth.name} onChange={e=>setAuth({...auth,name:e.target.value})} required />}
@@ -85,6 +90,11 @@ export default function App(){
     {error && <div className="error">{error}</div>}
     <button disabled={busy}>{busy?'Please wait...':authMode==='login'?'Sign in':'Create account'}</button>
     <p className="switch" onClick={()=>{setAuthMode(authMode==='login'?'register':'login');setError('')}}>{authMode==='login'?'New here? Create an account':'Already registered? Sign in'}</p>
+    <div style={{marginTop:'10px',paddingTop:'14px',borderTop:'1px solid #1e3048',textAlign:'center'}}>
+      <button type="button" onClick={enterDemo} style={{width:'100%',background:'#17263c',border:'1px solid #38bdf8',color:'#38bdf8',padding:'11px',borderRadius:'8px',fontWeight:'600'}}>
+        🚀 Instant Demo Access (Preview App)
+      </button>
+    </div>
   </form></main>
 
   return <div className="app-shell">
