@@ -27,15 +27,13 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+          cache: 'gradle'
 
       - name: Install Mobile Dependencies
         working-directory: ./mobile
         run: npm install
 
-      - name: Prebuild Android Native Files
+      - name: Prebuild Android Native Project
         working-directory: ./mobile
         run: npx expo prebuild --platform android --no-install
 
@@ -43,24 +41,23 @@ jobs:
         working-directory: ./mobile/android
         run: chmod +x gradlew
 
-      - name: Compile Android APK with Gradle
+      - name: Build Android APK with Gradle
         working-directory: ./mobile/android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleDebug --no-daemon
 
-      - name: Copy & Name APK
+      - name: Prepare APK Output
         run: |
           mkdir -p build-output
           cp mobile/android/app/build/outputs/apk/debug/app-debug.apk build-output/TradeMind.apk
-          echo "APK successfully created at build-output/TradeMind.apk"
+          echo "TradeMind.apk ready."
 
       - name: Upload APK as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: TradeMind-APK
           path: build-output/TradeMind.apk
-          if-no-files-found: error
 
-      - name: Publish GitHub Release with TradeMind APK
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
@@ -68,13 +65,13 @@ jobs:
           name: TradeMind Android APK v1.0.0
           body: |
             ### 📱 TradeMind Android APK
-            Official standalone Android application package for TradeMind.
+            Standalone Android application package for TradeMind.
             
             **Installation Instructions:**
             1. Download `TradeMind.apk` below directly to your Android device.
             2. Tap the downloaded file to install.
-            3. If prompted, allow "Install from unknown sources" in settings.
-            4. Open TradeMind and start journaling your trades!
+            3. If prompted, allow "Install from unknown sources".
+            4. Open TradeMind and start journaling!
           files: build-output/TradeMind.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
