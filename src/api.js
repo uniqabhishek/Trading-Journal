@@ -1,4 +1,9 @@
-const API = 'http://127.0.0.1:5000/api';
+let rawApi = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000/api';
+if (!rawApi.startsWith('http://') && !rawApi.startsWith('https://') && !rawApi.startsWith('/')) {
+  rawApi = `https://${rawApi}`;
+}
+const baseApi = rawApi.replace(/\/+$/, '');
+const API = baseApi.endsWith('/api') ? baseApi : `${baseApi}/api`;
 
 export function getToken() {
   return localStorage.getItem('tm_token');
