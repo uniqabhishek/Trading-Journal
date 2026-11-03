@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "TradeMind AI",
+    "slug": "trademind-ai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0b1220"
+    },
+    "android": {
+      "package": "com.trademindai.app"
+    }
+  }
+}
