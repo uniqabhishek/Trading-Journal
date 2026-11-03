@@ -7,3 +7,6 @@ node_modules/
 dist/
 .expo/
 .vercel
+
+mobile/android/
+mobile/ios/

@@ -1,0 +1,17 @@
+{
+  "name": "TradeMind AI",
+  "short_name": "TradeMind",
+  "description": "Professional Trading Performance & Psychology Journal",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#070b14",
+  "theme_color": "#070b14",
+  "icons": [
+    {
+      "src": "./logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
