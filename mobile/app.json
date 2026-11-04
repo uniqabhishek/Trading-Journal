@@ -2,7 +2,7 @@
   "expo": {
     "name": "TradeMind",
     "slug": "trademind",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "jsEngine": "hermes",
@@ -14,6 +14,11 @@
     },
     "android": {
       "package": "com.trademind.app",
+      "splash": {
+        "image": "./assets/splash.png",
+        "backgroundColor": "#070b14",
+        "resizeMode": "contain"
+      },
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#070b14"
@@ -22,6 +27,14 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.trademind.app"
-    }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "TradeMind needs access to your photos to attach chart screenshots to your trading journal."
+        }
+      ]
+    ]
   }
 }

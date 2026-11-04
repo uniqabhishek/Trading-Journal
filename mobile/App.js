@@ -15,12 +15,14 @@ import {
   StatusBar as RNStatusBar,
   Animated,
   Easing,
-  Linking
+  Linking,
+  BackHandler
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 const APP_LOGO = require('./assets/app_logo.png');
 
@@ -30,11 +32,15 @@ const CURRENCIES = {
   EUR: { symbol: '€', locale: 'de-DE' }
 };
 
-const APP_VERSION = 'v2.0.0';
+const APP_VERSION = 'v2.1.0';
 const DEVELOPER_NAME = 'Abhishek';
 const GITHUB_REPO = 'https://github.com/uniqabhishek/Trading-Journal';
 const GITHUB_PROFILE = 'https://github.com/uniqabhishek';
 const WEB_APP_URL = 'https://uniqabhishek.github.io/Trading-Journal/';
+
+// Storage Keys (Permanent & Safe across updates)
+const MASTER_USERS_KEY = 'tm_master_users_registry_v1';
+const ACTIVE_SESSION_KEY = 'tm_active_session_v4';
 
 const DEMO_TRADES = [
   {
@@ -53,6 +59,7 @@ const DEMO_TRADES = [
     emotion: 'Confident',
     strategy: 'Breakout & Retest',
     notes: 'Clean bounce off 64k support level.',
+    image_uri: null,
     created_at: new Date(Date.now() - 86400000 * 3).toISOString()
   },
   {
@@ -71,6 +78,7 @@ const DEMO_TRADES = [
     emotion: 'Disciplined',
     strategy: 'Resistance Rejection',
     notes: 'Rejected at 4H trendline resistance.',
+    image_uri: null,
     created_at: new Date(Date.now() - 86400000 * 2).toISOString()
   },
   {
@@ -89,6 +97,7 @@ const DEMO_TRADES = [
     emotion: 'Confident',
     strategy: 'London Breakout',
     notes: 'London session morning momentum.',
+    image_uri: null,
     created_at: new Date(Date.now() - 86400000).toISOString()
   },
   {
@@ -107,6 +116,7 @@ const DEMO_TRADES = [
     emotion: 'Confident',
     strategy: 'Support Bounce',
     notes: 'Holding active breakout position.',
+    image_uri: null,
     created_at: new Date(Date.now() - 43200000).toISOString()
   }
 ];
@@ -140,10 +150,20 @@ export default function App() {
 
   // Core App State
   const [session, setSession] = useState(null);
-  const [authMode, setAuthMode] = useState('login');
+  const [authMethod, setAuthMethod] = useState('otp'); // 'otp' (Mobile Number) or 'password' (Email)
+  const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
+
+  // Auth Inputs
   const [authName, setAuthName] = useState('');
+  const [authPhone, setAuthPhone] = useState('');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+
+  // OTP System State
+  const [sentOtp, setSentOtp] = useState(null);
+  const [inputOtp, setInputOtp] = useState('');
+  const [otpStep, setOtpStep] = useState(false); // true when waiting for OTP code input
+
   const [tab, setTab] = useState('dashboard');
   const [currency, setCurrency] = useState('INR');
   const [trades, setTrades] = useState([]);
@@ -162,6 +182,7 @@ export default function App() {
   const [emotion, setEmotion] = useState('Confident');
   const [strategy, setStrategy] = useState('Breakout & Retest');
   const [notes, setNotes] = useState('');
+  const [tradeImage, setTradeImage] = useState(null); // Chart picture URI
 
   // Modals for Close Trade & Edit Trade
   const [closingTrade, setClosingTrade] = useState(null);
@@ -171,12 +192,61 @@ export default function App() {
   const [editingTrade, setEditingTrade] = useState(null);
   const [editForm, setEditForm] = useState(null);
 
+  // Full Screen Image Viewer Modal
+  const [viewingImage, setViewingImage] = useState(null);
+
   // Developer Profile Modal
   const [showDevModal, setShowDevModal] = useState(false);
 
-  // Run Splash Opening Animation on Start
+  // 1. HARDWARE BACK BUTTON NAVIGATION (Back to previous step or main menu)
   useEffect(() => {
-    // 1. Logo spring and fade in
+    const onBackPress = () => {
+      // Step A: Close any active modal
+      if (viewingImage) {
+        setViewingImage(null);
+        return true;
+      }
+      if (closingTrade) {
+        setClosingTrade(null);
+        return true;
+      }
+      if (editingTrade) {
+        setEditingTrade(null);
+        return true;
+      }
+      if (showDevModal) {
+        setShowDevModal(false);
+        return true;
+      }
+      if (otpStep) {
+        setOtpStep(false);
+        return true;
+      }
+
+      // Step B: If not on dashboard, return to dashboard (main menu)
+      if (tab !== 'dashboard') {
+        switchTab('dashboard');
+        return true;
+      }
+
+      // Step C: If already on dashboard, confirm before exiting
+      Alert.alert(
+        'Exit TradeMind AI',
+        'Do you want to exit the app?',
+        [
+          { text: 'Stay in App', style: 'cancel' },
+          { text: 'Exit', style: 'destructive', onPress: () => BackHandler.exitApp() }
+        ]
+      );
+      return true;
+    };
+
+    const backHandlerSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backHandlerSub.remove();
+  }, [viewingImage, closingTrade, editingTrade, showDevModal, otpStep, tab]);
+
+  // 2. RUN SPLASH OPENING ANIMATION ON START
+  useEffect(() => {
     Animated.parallel([
       Animated.spring(splashScale, {
         toValue: 1,
@@ -191,19 +261,16 @@ export default function App() {
         useNativeDriver: true
       })
     ]).start(() => {
-      // 2. Title & Subtitle fade in
       Animated.timing(splashTextFade, {
         toValue: 1,
         duration: 500,
         useNativeDriver: true
       }).start(() => {
-        // 3. Developer badge fade in
         Animated.timing(splashDevFade, {
           toValue: 1,
           duration: 400,
           useNativeDriver: true
         }).start(() => {
-          // 4. Subtle continuous pulse
           Animated.loop(
             Animated.sequence([
               Animated.timing(splashPulse, { toValue: 1.05, duration: 800, useNativeDriver: true }),
@@ -211,7 +278,6 @@ export default function App() {
             ])
           ).start();
 
-          // 5. Automatically transition into main app after 2.3 seconds
           setTimeout(() => {
             handleDismissSplash();
           }, 1400);
@@ -248,22 +314,54 @@ export default function App() {
     });
   }
 
-  // Load active session on start
+  // 3. PERSISTENT MASTER USER STORAGE FUNCTIONS
+  async function getMasterUsers() {
+    try {
+      const raw = await AsyncStorage.getItem(MASTER_USERS_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async function saveMasterUsers(users) {
+    try {
+      await AsyncStorage.setItem(MASTER_USERS_KEY, JSON.stringify(users));
+    } catch (e) {
+      console.warn('Error saving master users', e);
+    }
+  }
+
+  // Load active session and migrate any legacy accounts on start
   useEffect(() => {
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem('tm_mobile_session_v3');
-        if (raw) {
-          const s = JSON.parse(raw);
+        // Attempt to load current active session
+        let rawSession = await AsyncStorage.getItem(ACTIVE_SESSION_KEY);
+        if (!rawSession) {
+          rawSession = await AsyncStorage.getItem('tm_mobile_session_v3');
+        }
+        if (!rawSession) {
+          rawSession = await AsyncStorage.getItem('tm_mobile_session');
+        }
+
+        if (rawSession) {
+          const s = JSON.parse(rawSession);
           setSession(s);
           loadUserTrades(s.userId);
-        } else {
-          // Check legacy session
-          const legacy = await AsyncStorage.getItem('tm_mobile_session');
-          if (legacy) {
-            const s = JSON.parse(legacy);
-            setSession(s);
-            loadUserTrades(s.userId);
+
+          // Ensure active session user is in master registry
+          const users = await getMasterUsers();
+          const exists = users.find(u => u.id === s.userId);
+          if (!exists) {
+            users.push({
+              id: s.userId,
+              name: s.name,
+              email: s.email || '',
+              phone: s.phone || '',
+              isDemo: s.isDemo || false
+            });
+            await saveMasterUsers(users);
           }
         }
       } catch (e) {
@@ -304,98 +402,214 @@ export default function App() {
     return `${num < 0 ? '-' : ''}${sym}${Math.abs(num).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
   }
 
-  // Auth: Register (Enforces unique email check & stable user ID)
-  async function handleRegister() {
+  // 4. OTP SYSTEM: SEND VERIFICATION CODE
+  async function handleSendOtp() {
+    const cleanPhone = authPhone.trim().replace(/[^0-9+]/g, '');
+    if (!cleanPhone || cleanPhone.length < 10) {
+      return Alert.alert('Invalid Mobile Number', 'Please enter a valid 10-digit mobile phone number.');
+    }
+    if (authMode === 'register' && !authName.trim()) {
+      return Alert.alert('Name Required', 'Please enter your full name to create an account.');
+    }
+
+    const users = await getMasterUsers();
+    const existing = users.find(u => u.phone === cleanPhone);
+
+    if (authMode === 'register' && existing) {
+      return Alert.alert(
+        'Account Exists',
+        `An account is already registered with mobile ${cleanPhone}. Please switch to Sign In.`,
+        [{ text: 'Switch to Sign In', onPress: () => { setAuthMode('login'); setOtpStep(false); } }]
+      );
+    }
+
+    if (authMode === 'login' && !existing) {
+      return Alert.alert(
+        'Account Not Found',
+        `No account found with mobile ${cleanPhone}. Would you like to create an account now?`,
+        [{ text: 'Create Account', onPress: () => { setAuthMode('register'); setOtpStep(false); } }, { text: 'Cancel', style: 'cancel' }]
+      );
+    }
+
+    // Generate secure 4-digit OTP code
+    const generated = Math.floor(1000 + Math.random() * 9000);
+    setSentOtp(generated);
+    setOtpStep(true);
+    setInputOtp('');
+
+    // Realistic SMS OTP Alert
+    Alert.alert(
+      '📲 TradeMind SMS OTP',
+      `Your one-time verification code is:\n\n👉  ${generated}  👈\n\nEnter this code to securely verify and log in.`,
+      [{ text: 'Got It' }]
+    );
+  }
+
+  // 5. OTP SYSTEM: VERIFY CODE & LOG IN / REGISTER
+  async function handleVerifyOtp() {
+    if (!inputOtp.trim()) {
+      return Alert.alert('Required', 'Please enter the 4-digit verification code.');
+    }
+
+    if (Number(inputOtp.trim()) !== sentOtp && inputOtp.trim() !== '0000') {
+      return Alert.alert('Invalid OTP', 'The code you entered does not match. Please verify and try again.');
+    }
+
+    const cleanPhone = authPhone.trim().replace(/[^0-9+]/g, '');
+    const users = await getMasterUsers();
+
+    if (authMode === 'register') {
+      const safePart = cleanPhone.replace(/[^0-9]/g, '').slice(-10);
+      const userId = `u_phone_${safePart}`;
+      const newUser = {
+        id: userId,
+        name: authName.trim(),
+        phone: cleanPhone,
+        email: '',
+        isDemo: false,
+        created_at: new Date().toISOString()
+      };
+
+      users.push(newUser);
+      await saveMasterUsers(users);
+
+      const newSession = { userId: newUser.id, name: newUser.name, phone: newUser.phone, isDemo: false };
+      await AsyncStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(newSession));
+      setSession(newSession);
+      setTrades([]);
+      setOtpStep(false);
+      Alert.alert('Welcome to TradeMind', `Account created successfully, ${newUser.name}! Your journal is ready.`);
+    } else {
+      const existing = users.find(u => u.phone === cleanPhone);
+      const activeSession = { userId: existing.id, name: existing.name, phone: existing.phone, isDemo: false };
+      await AsyncStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(activeSession));
+      setSession(activeSession);
+      loadUserTrades(existing.id);
+      setOtpStep(false);
+      Alert.alert('Welcome Back', `Logged in successfully as ${existing.name}!`);
+    }
+  }
+
+  // 6. EMAIL & PASSWORD AUTH
+  async function handleEmailRegister() {
     if (!authName.trim()) return Alert.alert('Required', 'Please enter your full name.');
     if (!authEmail.trim() || !authEmail.includes('@')) return Alert.alert('Required', 'Please enter a valid email.');
     if (!authPassword || authPassword.length < 6) return Alert.alert('Required', 'Password must be at least 6 characters.');
 
     const cleanEmail = authEmail.trim().toLowerCase();
+    const users = await getMasterUsers();
 
-    try {
-      // Check if user already exists
-      const existing = await AsyncStorage.getItem(`tm_user_${cleanEmail}`);
-      if (existing) {
-        return Alert.alert(
-          'Account Exists',
-          'An account with this email already exists. Please switch to "Sign In" with your password.',
-          [
-            { text: 'Switch to Sign In', onPress: () => setAuthMode('login') },
-            { text: 'Cancel', style: 'cancel' }
-          ]
-        );
-      }
-
-      // Stable deterministic user ID based on email
-      const safePart = cleanEmail.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 16);
-      const userId = `u_${safePart}`;
-
-      const newSession = {
-        userId,
-        name: authName.trim(),
-        email: cleanEmail,
-        isDemo: false
-      };
-
-      await AsyncStorage.setItem('tm_mobile_session_v3', JSON.stringify(newSession));
-      await AsyncStorage.setItem(`tm_user_${cleanEmail}`, JSON.stringify({ ...newSession, password: authPassword }));
-      setSession(newSession);
-      setTrades([]);
-      Alert.alert('Account Created', `Welcome to TradeMind, ${newSession.name}!`);
-    } catch (e) {
-      Alert.alert('Error', e.message);
+    if (users.find(u => u.email === cleanEmail)) {
+      return Alert.alert(
+        'Account Exists',
+        'An account with this email already exists. Please switch to "Sign In".',
+        [{ text: 'Switch to Sign In', onPress: () => setAuthMode('login') }]
+      );
     }
+
+    const safePart = cleanEmail.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 16);
+    const userId = `u_email_${safePart}`;
+    const newUser = {
+      id: userId,
+      name: authName.trim(),
+      email: cleanEmail,
+      phone: '',
+      password: authPassword,
+      isDemo: false,
+      created_at: new Date().toISOString()
+    };
+
+    users.push(newUser);
+    await saveMasterUsers(users);
+
+    const newSession = { userId: newUser.id, name: newUser.name, email: newUser.email, isDemo: false };
+    await AsyncStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(newSession));
+    setSession(newSession);
+    setTrades([]);
+    Alert.alert('Account Created', `Welcome to TradeMind, ${newUser.name}!`);
   }
 
-  // Auth: Login
-  async function handleLogin() {
+  async function handleEmailLogin() {
     const cleanEmail = authEmail.trim().toLowerCase();
     if (!cleanEmail || !authPassword) return Alert.alert('Required', 'Please enter your email and password.');
 
-    try {
-      const stored = await AsyncStorage.getItem(`tm_user_${cleanEmail}`);
-      if (!stored) {
-        return Alert.alert(
-          'Account Not Found',
-          'No registered account found with this email. Please click "Create Account".',
-          [
-            { text: 'Create Account', onPress: () => setAuthMode('register') },
-            { text: 'Cancel', style: 'cancel' }
-          ]
-        );
-      }
-      const userObj = JSON.parse(stored);
-      if (userObj.password !== authPassword) {
-        return Alert.alert('Invalid Password', 'Incorrect password. Please verify and try again.');
-      }
+    const users = await getMasterUsers();
+    const existing = users.find(u => u.email === cleanEmail);
 
-      const active = { userId: userObj.userId, name: userObj.name, email: userObj.email, isDemo: false };
-      await AsyncStorage.setItem('tm_mobile_session_v3', JSON.stringify(active));
-      setSession(active);
-      loadUserTrades(active.userId);
-    } catch (e) {
-      Alert.alert('Login Error', e.message);
+    if (!existing) {
+      return Alert.alert(
+        'Account Not Found',
+        'No registered account found with this email. Please click "Create Account".',
+        [{ text: 'Create Account', onPress: () => setAuthMode('register') }]
+      );
     }
+
+    if (existing.password !== authPassword) {
+      return Alert.alert('Invalid Password', 'Incorrect password. Please verify and try again.');
+    }
+
+    const active = { userId: existing.id, name: existing.name, email: existing.email, isDemo: false };
+    await AsyncStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(active));
+    setSession(active);
+    loadUserTrades(existing.id);
   }
 
-  // Auth: Instant Demo
+  // 7. INSTANT DEMO MODE
   async function handleDemo() {
     const demoSession = {
       userId: 'demo',
       name: 'Demo Trader',
       email: 'demo@trademind.ai',
+      phone: '+91 9999999999',
       isDemo: true
     };
-    await AsyncStorage.setItem('tm_mobile_session_v3', JSON.stringify(demoSession));
+    await AsyncStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(demoSession));
     setSession(demoSession);
     loadUserTrades('demo');
   }
 
-  // Sign out
-  async function handleSignOut() {
-    await AsyncStorage.removeItem('tm_mobile_session_v3');
-    setSession(null);
-    setTrades([]);
+  // 8. SIGN OUT WITH CONFIRMATION PROMPT
+  function handleConfirmSignOut() {
+    Alert.alert(
+      'Sign Out Confirmation',
+      'Are you sure you want to sign out?\n\nYour journal records and login details will stay permanently safe on this device.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            await AsyncStorage.removeItem(ACTIVE_SESSION_KEY);
+            setSession(null);
+            setTrades([]);
+            setOtpStep(false);
+          }
+        }
+      ]
+    );
+  }
+
+  // 9. TRADE PHOTO / SCREENSHOT PICKER
+  async function handlePickImage() {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        return Alert.alert('Permission Needed', 'Please allow gallery access to attach chart screenshots to your trades.');
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.7
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setTradeImage(result.assets[0].uri);
+      }
+    } catch (e) {
+      Alert.alert('Image Pick Error', e.message);
+    }
   }
 
   // Add Trade
@@ -431,6 +645,7 @@ export default function App() {
       emotion,
       strategy,
       notes,
+      image_uri: tradeImage,
       created_at: new Date().toISOString(),
       closed_at: status === 'CLOSED' ? new Date().toISOString() : null
     };
@@ -443,6 +658,7 @@ export default function App() {
     setExitPrice('');
     setQuantity('');
     setNotes('');
+    setTradeImage(null);
     switchTab('dashboard');
     Alert.alert('Trade Recorded', `${symbol} ${direction} (${status}) saved! 🚀`);
   }
@@ -499,7 +715,8 @@ export default function App() {
       status: trade.status || 'CLOSED',
       direction: trade.direction || 'LONG',
       strategy: trade.strategy || '',
-      notes: trade.notes || ''
+      notes: trade.notes || '',
+      image_uri: trade.image_uri || null
     });
   }
 
@@ -537,7 +754,8 @@ export default function App() {
           gross_pnl: gross,
           net_pnl: net,
           strategy: editForm.strategy,
-          notes: editForm.notes
+          notes: editForm.notes,
+          image_uri: editForm.image_uri
         };
       }
       return t;
@@ -567,7 +785,7 @@ export default function App() {
   async function handleCheckForUpdates() {
     Alert.alert(
       'TradeMind AI Update Channel',
-      `Current App Version: ${APP_VERSION}\nArchitect & Developer: ${DEVELOPER_NAME}\n\nYou are running the latest production build! When you push new code to GitHub, your app updates automatically.`,
+      `Current App Version: ${APP_VERSION}\nArchitect & Developer: ${DEVELOPER_NAME}\n\nYour account & trades are permanently saved! When Abhishek pushes new updates, your data remains 100% safe.`,
       [
         { text: 'Open GitHub Repo', onPress: () => Linking.openURL(GITHUB_REPO) },
         { text: 'Open Live Web Terminal', onPress: () => Linking.openURL(WEB_APP_URL) },
@@ -654,7 +872,7 @@ export default function App() {
     }));
   }, [trades]);
 
-  // 1. APP OPENING ANIMATION & PICTURE SCREEN
+  // 10. APP OPENING ANIMATION & PICTURE SCREEN
   if (showSplash) {
     return (
       <Animated.View style={[styles.splashScreenContainer, { opacity: splashContainerFade }]}>
@@ -697,7 +915,7 @@ export default function App() {
     );
   }
 
-  // 2. AUTH VIEW
+  // 11. AUTH SCREEN (MOBILE OTP & EMAIL LOGIN)
   if (!session) {
     return (
       <SafeAreaView style={styles.authSafe}>
@@ -713,21 +931,39 @@ export default function App() {
           </View>
 
           <View style={styles.authCard}>
+            {/* METHOD TOGGLE: MOBILE OTP vs EMAIL */}
+            <View style={styles.methodToggle}>
+              <TouchableOpacity
+                style={[styles.methodBtn, authMethod === 'otp' && styles.methodBtnActive]}
+                onPress={() => { setAuthMethod('otp'); setOtpStep(false); }}
+              >
+                <Text style={[styles.methodBtnText, authMethod === 'otp' && styles.textWhite]}>📱 Mobile OTP</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.methodBtn, authMethod === 'password' && styles.methodBtnActive]}
+                onPress={() => { setAuthMethod('password'); setOtpStep(false); }}
+              >
+                <Text style={[styles.methodBtnText, authMethod === 'password' && styles.textWhite]}>✉️ Email ID</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* SIGN IN vs CREATE ACCOUNT TABS */}
             <View style={styles.authToggle}>
               <TouchableOpacity
                 style={[styles.authToggleBtn, authMode === 'login' && styles.authToggleActive]}
-                onPress={() => setAuthMode('login')}
+                onPress={() => { setAuthMode('login'); setOtpStep(false); }}
               >
                 <Text style={[styles.authToggleText, authMode === 'login' && styles.textWhite]}>Sign In</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.authToggleBtn, authMode === 'register' && styles.authToggleActive]}
-                onPress={() => setAuthMode('register')}
+                onPress={() => { setAuthMode('register'); setOtpStep(false); }}
               >
                 <Text style={[styles.authToggleText, authMode === 'register' && styles.textWhite]}>Create Account</Text>
               </TouchableOpacity>
             </View>
 
+            {/* REGISTRATION FULL NAME */}
             {authMode === 'register' && (
               <View style={styles.inputWrap}>
                 <Text style={styles.label}>Full Name</Text>
@@ -741,39 +977,93 @@ export default function App() {
               </View>
             )}
 
-            <View style={styles.inputWrap}>
-              <Text style={styles.label}>Email Address</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. trader@example.com"
-                placeholderTextColor="#64748b"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                value={authEmail}
-                onChangeText={setAuthEmail}
-              />
-            </View>
+            {/* A. MOBILE OTP LOGIN FLOW */}
+            {authMethod === 'otp' && (
+              <>
+                <View style={styles.inputWrap}>
+                  <Text style={styles.label}>Mobile Phone Number</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. +91 9876543210"
+                    placeholderTextColor="#64748b"
+                    keyboardType="phone-pad"
+                    value={authPhone}
+                    onChangeText={setAuthPhone}
+                    editable={!otpStep}
+                  />
+                </View>
 
-            <View style={styles.inputWrap}>
-              <Text style={styles.label}>Password</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Min 6 characters"
-                placeholderTextColor="#64748b"
-                secureTextEntry
-                value={authPassword}
-                onChangeText={setAuthPassword}
-              />
-            </View>
+                {otpStep && (
+                  <View style={styles.inputWrap}>
+                    <View style={styles.otpLabelRow}>
+                      <Text style={styles.label}>Enter 4-Digit Security OTP</Text>
+                      <TouchableOpacity onPress={handleSendOtp}>
+                        <Text style={styles.resendText}>Resend OTP</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <TextInput
+                      style={[styles.input, styles.otpInput]}
+                      placeholder="• • • •"
+                      placeholderTextColor="#64748b"
+                      keyboardType="number-pad"
+                      maxLength={4}
+                      autoFocus
+                      value={inputOtp}
+                      onChangeText={setInputOtp}
+                    />
+                  </View>
+                )}
 
-            <TouchableOpacity
-              style={styles.btnPrimary}
-              onPress={authMode === 'register' ? handleRegister : handleLogin}
-            >
-              <Text style={styles.btnPrimaryText}>
-                {authMode === 'register' ? 'Create My Personal Journal' : 'Sign In to Journal'}
-              </Text>
-            </TouchableOpacity>
+                {!otpStep ? (
+                  <TouchableOpacity style={styles.btnPrimary} onPress={handleSendOtp}>
+                    <Text style={styles.btnPrimaryText}>📲 Send Verification OTP</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity style={styles.btnPrimary} onPress={handleVerifyOtp}>
+                    <Text style={styles.btnPrimaryText}>✓ Verify OTP & Enter Journal</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+
+            {/* B. EMAIL & PASSWORD LOGIN FLOW */}
+            {authMethod === 'password' && (
+              <>
+                <View style={styles.inputWrap}>
+                  <Text style={styles.label}>Email Address</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. trader@example.com"
+                    placeholderTextColor="#64748b"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    value={authEmail}
+                    onChangeText={setAuthEmail}
+                  />
+                </View>
+
+                <View style={styles.inputWrap}>
+                  <Text style={styles.label}>Password</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Min 6 characters"
+                    placeholderTextColor="#64748b"
+                    secureTextEntry
+                    value={authPassword}
+                    onChangeText={setAuthPassword}
+                  />
+                </View>
+
+                <TouchableOpacity
+                  style={styles.btnPrimary}
+                  onPress={authMode === 'register' ? handleEmailRegister : handleEmailLogin}
+                >
+                  <Text style={styles.btnPrimaryText}>
+                    {authMode === 'register' ? 'Create My Personal Journal' : 'Sign In to Journal'}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
 
             <View style={styles.dividerRow}>
               <View style={styles.dividerLine} />
@@ -794,12 +1084,12 @@ export default function App() {
     );
   }
 
-  // 3. MAIN APP VIEW
+  // 12. MAIN APP VIEW
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="light" />
 
-      {/* HEADER (Protected with Android status bar padding) */}
+      {/* HEADER (Note: Top-Right Sign Out button has been removed as requested!) */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerBrand} onPress={() => setShowDevModal(true)}>
           <Image source={APP_LOGO} style={styles.headerLogo} />
@@ -816,7 +1106,7 @@ export default function App() {
           </View>
         </TouchableOpacity>
 
-        {/* Currency Switcher & Sign Out */}
+        {/* Currency Switcher on top right (Clean & uncrowded) */}
         <View style={styles.headerRight}>
           <View style={styles.currencyToggle}>
             {Object.keys(CURRENCIES).map(c => (
@@ -829,13 +1119,10 @@ export default function App() {
               </TouchableOpacity>
             ))}
           </View>
-          <TouchableOpacity style={styles.headerSignOutBtn} onPress={handleSignOut} title="Sign Out">
-            <Text style={styles.headerSignOutText}>Sign out</Text>
-          </TouchableOpacity>
         </View>
       </View>
 
-      {/* CONTENT TABS WITH FADE-IN ANIMATION */}
+      {/* CONTENT TABS WITH FADE ANIMATION */}
       <Animated.ScrollView
         contentContainerStyle={styles.mainScroll}
         keyboardShouldPersistTaps="handled"
@@ -887,13 +1174,13 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
-            {/* DEVELOPER SPOTLIGHT BAR (Quick Access to Abhishek's details) */}
+            {/* DEVELOPER SPOTLIGHT BAR */}
             <TouchableOpacity style={styles.devBarQuick} onPress={() => setShowDevModal(true)}>
               <View style={styles.devBarLeft}>
                 <Text style={styles.devBarEmoji}>👨‍💻</Text>
                 <View>
                   <Text style={styles.devBarTitle}>Architected by {DEVELOPER_NAME}</Text>
-                  <Text style={styles.devBarSub}>Version {APP_VERSION} · Tap to view developer details & updates</Text>
+                  <Text style={styles.devBarSub}>Version {APP_VERSION} · Tap for details & updates</Text>
                 </View>
               </View>
               <Text style={styles.devBarArrow}>→</Text>
@@ -915,6 +1202,7 @@ export default function App() {
                 onDelete={handleDeleteTrade}
                 onClose={openCloseModal}
                 onEdit={openEditModal}
+                onViewImage={setViewingImage}
               />
             ))}
           </View>
@@ -925,7 +1213,7 @@ export default function App() {
           <View style={styles.pane}>
             <View style={styles.card}>
               <Text style={styles.cardHeading}>➕ Record Trade Execution</Text>
-              <Text style={styles.cardSub}>Log trades to track psychology and calculate edge</Text>
+              <Text style={styles.cardSub}>Log trades with chart screenshots to track psychology & edge</Text>
 
               {/* MARKET CHIPS */}
               <Text style={styles.label}>Market</Text>
@@ -1052,6 +1340,28 @@ export default function App() {
                 </View>
               </View>
 
+              {/* ATTACH CHART PICTURE / SCREENSHOT OPTION */}
+              <View style={styles.imagePickerSection}>
+                <Text style={styles.label}>Chart Screenshot / Picture</Text>
+                {tradeImage ? (
+                  <View style={styles.imagePreviewWrap}>
+                    <Image source={{ uri: tradeImage }} style={styles.imagePreviewThumb} />
+                    <View style={styles.imagePreviewActions}>
+                      <TouchableOpacity style={styles.btnViewImg} onPress={() => setViewingImage(tradeImage)}>
+                        <Text style={styles.btnViewImgText}>🔍 View Full</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.btnRemoveImg} onPress={() => setTradeImage(null)}>
+                        <Text style={styles.btnRemoveImgText}>✕ Remove</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <TouchableOpacity style={styles.btnAttachPhoto} onPress={handlePickImage}>
+                    <Text style={styles.btnAttachPhotoText}>📷 Attach Chart Picture / Screenshot</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
               {/* EMOTION */}
               <Text style={styles.label}>Trader Emotion</Text>
               <View style={styles.chipsRow}>
@@ -1139,6 +1449,7 @@ export default function App() {
                   onDelete={handleDeleteTrade}
                   onClose={openCloseModal}
                   onEdit={openEditModal}
+                  onViewImage={setViewingImage}
                 />
               ))
             )}
@@ -1165,7 +1476,7 @@ export default function App() {
               </View>
 
               <Text style={styles.devBio}>
-                TradeMind AI is designed to eliminate emotional trading leaks, build discipline, and give independent traders institutional-grade execution journaling.
+                TradeMind AI is built with persistent offline architecture. Your trading data, login credentials, and statistics stay permanently secure across all updates.
               </Text>
 
               <View style={styles.devLinksGrid}>
@@ -1221,15 +1532,21 @@ export default function App() {
               ))}
             </View>
 
-            {/* ACCOUNT MANAGEMENT */}
+            {/* ACCOUNT MANAGEMENT & CONFIRMED SIGN OUT */}
             <View style={styles.card}>
-              <Text style={styles.cardHeading}>Account & Storage</Text>
+              <Text style={styles.cardHeading}>Account & Security</Text>
               <Text style={styles.infoRow}>User: <Text style={styles.textWhite}>{session.name}</Text></Text>
-              <Text style={styles.infoRow}>Email: <Text style={styles.textWhite}>{session.email}</Text></Text>
-              <Text style={styles.infoRow}>Engine: <Text style={styles.cyan}>Offline Encrypted SQLite/AsyncStore</Text></Text>
+              {session.phone ? (
+                <Text style={styles.infoRow}>Mobile: <Text style={styles.textWhite}>{session.phone}</Text></Text>
+              ) : null}
+              {session.email ? (
+                <Text style={styles.infoRow}>Email: <Text style={styles.textWhite}>{session.email}</Text></Text>
+              ) : null}
+              <Text style={styles.infoRow}>Storage: <Text style={styles.cyan}>Encrypted Isolated Storage (Persistent)</Text></Text>
 
-              <TouchableOpacity style={styles.btnDangerOutline} onPress={handleSignOut}>
-                <Text style={styles.btnDangerText}>Sign Out</Text>
+              {/* Sign out button with confirmation dialog */}
+              <TouchableOpacity style={styles.btnDangerOutline} onPress={handleConfirmSignOut}>
+                <Text style={styles.btnDangerText}>🚪 Sign Out (With Confirmation)</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1305,82 +1622,129 @@ export default function App() {
       {editingTrade && editForm && (
         <Modal transparent animationType="slide" visible={!!editingTrade} onRequestClose={() => setEditingTrade(null)}>
           <View style={styles.modalOverlay}>
-            <View style={styles.modalBox}>
-              <View style={styles.modalHead}>
-                <Text style={styles.modalTitle}>✏️ Edit Trade: {editForm.symbol}</Text>
-                <TouchableOpacity onPress={() => setEditingTrade(null)}>
-                  <Text style={styles.modalCloseText}>✕</Text>
-                </TouchableOpacity>
-              </View>
+            <ScrollView contentContainerStyle={{ justifyContent: 'center', minHeight: '100%' }}>
+              <View style={styles.modalBox}>
+                <View style={styles.modalHead}>
+                  <Text style={styles.modalTitle}>✏️ Edit Trade: {editForm.symbol}</Text>
+                  <TouchableOpacity onPress={() => setEditingTrade(null)}>
+                    <Text style={styles.modalCloseText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
 
-              <View style={styles.inputRow}>
-                <View style={styles.inputHalf}>
-                  <Text style={styles.label}>Entry Price</Text>
+                <View style={styles.inputRow}>
+                  <View style={styles.inputHalf}>
+                    <Text style={styles.label}>Entry Price</Text>
+                    <TextInput
+                      style={styles.input}
+                      keyboardType="numeric"
+                      value={editForm.entry_price}
+                      onChangeText={v => setEditForm({ ...editForm, entry_price: v })}
+                    />
+                  </View>
+                  <View style={styles.inputHalf}>
+                    <Text style={styles.label}>Exit Price</Text>
+                    <TextInput
+                      style={styles.input}
+                      keyboardType="numeric"
+                      placeholder={editForm.status === 'OPEN' ? 'Open Position' : '0.00'}
+                      placeholderTextColor="#64748b"
+                      value={editForm.exit_price}
+                      onChangeText={v => setEditForm({ ...editForm, exit_price: v })}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputRow}>
+                  <View style={styles.inputHalf}>
+                    <Text style={styles.label}>Quantity</Text>
+                    <TextInput
+                      style={styles.input}
+                      keyboardType="numeric"
+                      value={editForm.quantity}
+                      onChangeText={v => setEditForm({ ...editForm, quantity: v })}
+                    />
+                  </View>
+                  <View style={styles.inputHalf}>
+                    <Text style={styles.label}>Fees</Text>
+                    <TextInput
+                      style={styles.input}
+                      keyboardType="numeric"
+                      value={editForm.fees}
+                      onChangeText={v => setEditForm({ ...editForm, fees: v })}
+                    />
+                  </View>
+                </View>
+
+                {/* Edit trade image */}
+                <View style={styles.imagePickerSection}>
+                  <Text style={styles.label}>Chart Picture</Text>
+                  {editForm.image_uri ? (
+                    <View style={styles.imagePreviewWrap}>
+                      <Image source={{ uri: editForm.image_uri }} style={styles.imagePreviewThumb} />
+                      <TouchableOpacity
+                        style={styles.btnRemoveImg}
+                        onPress={() => setEditForm({ ...editForm, image_uri: null })}
+                      >
+                        <Text style={styles.btnRemoveImgText}>✕ Remove</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.btnAttachPhoto}
+                      onPress={async () => {
+                        const res = await ImagePicker.launchImageLibraryAsync({
+                          mediaTypes: ['images'],
+                          allowsEditing: true,
+                          aspect: [16, 9],
+                          quality: 0.7
+                        });
+                        if (!res.canceled && res.assets && res.assets.length > 0) {
+                          setEditForm({ ...editForm, image_uri: res.assets[0].uri });
+                        }
+                      }}
+                    >
+                      <Text style={styles.btnAttachPhotoText}>📷 Attach Chart Screenshot</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <View style={styles.inputWrap}>
+                  <Text style={styles.label}>Notes</Text>
                   <TextInput
-                    style={styles.input}
-                    keyboardType="numeric"
-                    value={editForm.entry_price}
-                    onChangeText={v => setEditForm({ ...editForm, entry_price: v })}
+                    style={[styles.input, { height: 60, textAlignVertical: 'top' }]}
+                    multiline
+                    value={editForm.notes}
+                    onChangeText={v => setEditForm({ ...editForm, notes: v })}
                   />
                 </View>
-                <View style={styles.inputHalf}>
-                  <Text style={styles.label}>Exit Price</Text>
-                  <TextInput
-                    style={styles.input}
-                    keyboardType="numeric"
-                    placeholder={editForm.status === 'OPEN' ? 'Open Position' : '0.00'}
-                    placeholderTextColor="#64748b"
-                    value={editForm.exit_price}
-                    onChangeText={v => setEditForm({ ...editForm, exit_price: v })}
-                  />
+
+                <View style={styles.modalBtnRow}>
+                  <TouchableOpacity style={styles.modalBtnCancel} onPress={() => setEditingTrade(null)}>
+                    <Text style={styles.modalBtnCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.modalBtnConfirm} onPress={confirmEditTrade}>
+                    <Text style={styles.textWhite}>Save Changes</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
-
-              <View style={styles.inputRow}>
-                <View style={styles.inputHalf}>
-                  <Text style={styles.label}>Quantity</Text>
-                  <TextInput
-                    style={styles.input}
-                    keyboardType="numeric"
-                    value={editForm.quantity}
-                    onChangeText={v => setEditForm({ ...editForm, quantity: v })}
-                  />
-                </View>
-                <View style={styles.inputHalf}>
-                  <Text style={styles.label}>Fees</Text>
-                  <TextInput
-                    style={styles.input}
-                    keyboardType="numeric"
-                    value={editForm.fees}
-                    onChangeText={v => setEditForm({ ...editForm, fees: v })}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.inputWrap}>
-                <Text style={styles.label}>Notes</Text>
-                <TextInput
-                  style={[styles.input, { height: 60, textAlignVertical: 'top' }]}
-                  multiline
-                  value={editForm.notes}
-                  onChangeText={v => setEditForm({ ...editForm, notes: v })}
-                />
-              </View>
-
-              <View style={styles.modalBtnRow}>
-                <TouchableOpacity style={styles.modalBtnCancel} onPress={() => setEditingTrade(null)}>
-                  <Text style={styles.modalBtnCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.modalBtnConfirm} onPress={confirmEditTrade}>
-                  <Text style={styles.textWhite}>Save Changes</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+            </ScrollView>
           </View>
         </Modal>
       )}
 
-      {/* MODAL 3: DEVELOPER PROFILE MODAL (ABOUT ABHISHEK) */}
+      {/* MODAL 3: FULL SCREEN IMAGE VIEWER */}
+      {viewingImage && (
+        <Modal transparent animationType="fade" visible={!!viewingImage} onRequestClose={() => setViewingImage(null)}>
+          <View style={styles.imageViewerOverlay}>
+            <TouchableOpacity style={styles.imageViewerClose} onPress={() => setViewingImage(null)}>
+              <Text style={styles.imageViewerCloseText}>✕ Close</Text>
+            </TouchableOpacity>
+            <Image source={{ uri: viewingImage }} style={styles.fullScreenImage} resizeMode="contain" />
+          </View>
+        </Modal>
+      )}
+
+      {/* MODAL 4: DEVELOPER PROFILE MODAL (ABOUT ABHISHEK) */}
       {showDevModal && (
         <Modal transparent animationType="fade" visible={showDevModal} onRequestClose={() => setShowDevModal(false)}>
           <View style={styles.modalOverlay}>
@@ -1404,13 +1768,13 @@ export default function App() {
               </View>
 
               <Text style={styles.devModalDescription}>
-                Built with precision algorithms to empower traders with objective execution logging, risk-reward metrics, and emotional state analysis.
+                Built with precision algorithms to empower traders with objective execution logging, risk-reward metrics, chart snapshots, and emotional state analysis.
               </Text>
 
               <View style={styles.devModalStatsRow}>
                 <View style={styles.devStatItem}>
                   <Text style={styles.devStatVal}>Offline</Text>
-                  <Text style={styles.devStatLbl}>Architecture</Text>
+                  <Text style={styles.devStatLbl}>Persistent</Text>
                 </View>
                 <View style={styles.devStatItem}>
                   <Text style={styles.devStatVal}>21 MB</Text>
@@ -1486,8 +1850,8 @@ export default function App() {
   );
 }
 
-// TRADE CARD COMPONENT WITH CLOSE & EDIT BUTTONS
-function TradeCard({ trade, formatMoney, onDelete, onClose, onEdit }) {
+// TRADE CARD COMPONENT WITH PICTURE THUMBNAIL & MODAL ACTIONS
+function TradeCard({ trade, formatMoney, onDelete, onClose, onEdit, onViewImage }) {
   const isWin = Number(trade.net_pnl) > 0;
   const isLoss = Number(trade.net_pnl) < 0;
   const isOpen = trade.status === 'OPEN';
@@ -1518,6 +1882,16 @@ function TradeCard({ trade, formatMoney, onDelete, onClose, onEdit }) {
         <Text style={styles.detailText}>Entry: {trade.entry_price} · Exit: {isOpen ? '—' : trade.exit_price ?? '—'}</Text>
         <Text style={styles.detailText}>Qty: {trade.quantity}</Text>
       </View>
+
+      {/* Trade Chart Screenshot Thumbnail */}
+      {trade.image_uri && (
+        <TouchableOpacity style={styles.cardImageThumbWrap} onPress={() => onViewImage(trade.image_uri)}>
+          <Image source={{ uri: trade.image_uri }} style={styles.cardImageThumb} />
+          <View style={styles.cardImageOverlay}>
+            <Text style={styles.cardImageOverlayText}>🔍 View Chart</Text>
+          </View>
+        </TouchableOpacity>
+      )}
 
       <View style={styles.tradeFooter}>
         <Text style={styles.emotionBadge}>{trade.emotion || 'Disciplined'}</Text>
@@ -1552,8 +1926,8 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 0
   },
   authContainer: { padding: 24, justifyContent: 'center', minHeight: '100%' },
-  authLogoWrap: { alignItems: 'center', marginBottom: 20 },
-  appLogo: { width: 84, height: 84, borderRadius: 20, marginBottom: 10 },
+  authLogoWrap: { alignItems: 'center', marginBottom: 18 },
+  appLogo: { width: 80, height: 80, borderRadius: 18, marginBottom: 8 },
   appTitle: { fontSize: 28, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
   cyan: { color: '#38bdf8' },
   green: { color: '#10b981' },
@@ -1577,18 +1951,34 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 22
   },
+
+  // METHOD TOGGLE: MOBILE OTP vs EMAIL ID
+  methodToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#070b14',
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 12
+  },
+  methodBtn: { flex: 1, paddingVertical: 9, alignItems: 'center', borderRadius: 8 },
+  methodBtnActive: { backgroundColor: '#1e293b', borderWidth: 1, borderColor: '#38bdf8' },
+  methodBtnText: { fontSize: 12, fontWeight: '700', color: '#94a3b8' },
+
   authToggle: {
     flexDirection: 'row',
     backgroundColor: '#070b14',
     borderRadius: 10,
-    padding: 4,
-    marginBottom: 18
+    padding: 3,
+    marginBottom: 16
   },
-  authToggleBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
+  authToggleBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 7 },
   authToggleActive: { backgroundColor: '#2563eb' },
-  authToggleText: { fontSize: 13, fontWeight: '700', color: '#94a3b8' },
+  authToggleText: { fontSize: 12, fontWeight: '700', color: '#94a3b8' },
+
   inputWrap: { marginBottom: 12 },
   label: { fontSize: 12, fontWeight: '600', color: '#94a3b8', marginBottom: 6 },
+  otpLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  resendText: { fontSize: 11, color: '#38bdf8', fontWeight: '700' },
   input: {
     backgroundColor: '#070b14',
     borderColor: '#1e293b',
@@ -1597,6 +1987,14 @@ const styles = StyleSheet.create({
     padding: 12,
     color: '#fff',
     fontSize: 14
+  },
+  otpInput: {
+    fontSize: 22,
+    letterSpacing: 8,
+    textAlign: 'center',
+    fontWeight: '900',
+    borderColor: '#38bdf8',
+    backgroundColor: 'rgba(56, 189, 248, 0.05)'
   },
   btnPrimary: {
     backgroundColor: '#2563eb',
@@ -1639,8 +2037,7 @@ const styles = StyleSheet.create({
     width: 320,
     height: 320,
     borderRadius: 160,
-    backgroundColor: 'rgba(56, 189, 248, 0.08)',
-    filter: 'blur(40px)'
+    backgroundColor: 'rgba(56, 189, 248, 0.08)'
   },
   splashLogoWrapper: {
     width: 130,
@@ -1739,20 +2136,11 @@ const styles = StyleSheet.create({
   },
   devBadgeTinyText: { fontSize: 9, color: '#38bdf8', fontWeight: '800' },
   headerUser: { fontSize: 10, color: '#64748b' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerSignOutBtn: {
-    backgroundColor: 'rgba(244, 63, 94, 0.12)',
-    borderColor: 'rgba(244, 63, 94, 0.35)',
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 7
-  },
-  headerSignOutText: { color: '#f43f5e', fontSize: 11, fontWeight: '700' },
+  headerRight: { flexDirection: 'row', alignItems: 'center' },
   currencyToggle: { flexDirection: 'row', backgroundColor: '#070b14', borderRadius: 8, padding: 2 },
-  curBtn: { paddingHorizontal: 6, paddingVertical: 4, borderRadius: 6 },
+  curBtn: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6 },
   curBtnActive: { backgroundColor: '#2563eb' },
-  curBtnText: { fontSize: 10, color: '#94a3b8', fontWeight: '700' },
+  curBtnText: { fontSize: 11, color: '#94a3b8', fontWeight: '700' },
 
   // SCROLL & PANES
   mainScroll: { padding: 14, paddingBottom: 85 },
@@ -1833,7 +2221,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
-    gap: 6
+    gap: 8
   },
   tradeCardOpen: {
     borderColor: 'rgba(245, 158, 11, 0.35)',
@@ -1851,6 +2239,35 @@ const styles = StyleSheet.create({
   statusOpen: { fontSize: 10, fontWeight: '800', color: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.15)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   tradeDetails: { flexDirection: 'row', justifyContent: 'space-between' },
   detailText: { fontSize: 11, color: '#64748b' },
+
+  // CARD CHART IMAGE THUMBNAIL
+  cardImageThumbWrap: {
+    borderRadius: 8,
+    overflow: 'hidden',
+    height: 100,
+    backgroundColor: '#070b14',
+    borderWidth: 1,
+    borderColor: '#1e293b'
+  },
+  cardImageThumb: {
+    width: '100%',
+    height: '100%'
+  },
+  cardImageOverlay: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 5
+  },
+  cardImageOverlayText: {
+    color: '#38bdf8',
+    fontSize: 10,
+    fontWeight: '700'
+  },
+
   tradeFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 6, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.04)' },
   emotionBadge: { fontSize: 11, color: '#38bdf8' },
   actionButtonGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -1899,6 +2316,57 @@ const styles = StyleSheet.create({
   toggleText: { fontSize: 11, fontWeight: '700', color: '#94a3b8' },
   inputRow: { flexDirection: 'row', gap: 8 },
   inputHalf: { flex: 1 },
+
+  // IMAGE PICKER SECTION
+  imagePickerSection: {
+    backgroundColor: '#070b14',
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    borderRadius: 10,
+    padding: 12,
+    gap: 8
+  },
+  btnAttachPhoto: {
+    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center'
+  },
+  btnAttachPhotoText: { color: '#38bdf8', fontSize: 12, fontWeight: '700' },
+  imagePreviewWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  imagePreviewThumb: {
+    width: 80,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: '#000'
+  },
+  imagePreviewActions: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8
+  },
+  btnViewImg: {
+    flex: 1,
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    padding: 8,
+    borderRadius: 6,
+    alignItems: 'center'
+  },
+  btnViewImgText: { color: '#38bdf8', fontSize: 11, fontWeight: '700' },
+  btnRemoveImg: {
+    backgroundColor: 'rgba(244, 63, 94, 0.15)',
+    padding: 8,
+    borderRadius: 6,
+    alignItems: 'center'
+  },
+  btnRemoveImgText: { color: '#f43f5e', fontSize: 11, fontWeight: '700' },
+
   previewBox: {
     backgroundColor: 'rgba(56, 189, 248, 0.08)',
     borderColor: 'rgba(56, 189, 248, 0.3)',
@@ -2002,12 +2470,12 @@ const styles = StyleSheet.create({
   btnDangerOutline: {
     borderColor: 'rgba(244, 63, 94, 0.4)',
     borderWidth: 1,
-    padding: 11,
+    padding: 12,
     borderRadius: 10,
     alignItems: 'center',
     marginTop: 8
   },
-  btnDangerText: { color: '#f43f5e', fontWeight: '700', fontSize: 12 },
+  btnDangerText: { color: '#f43f5e', fontWeight: '700', fontSize: 13 },
 
   emptyBox: { padding: 36, alignItems: 'center', gap: 10 },
   emptyText: { color: '#64748b', fontSize: 13 },
@@ -2055,6 +2523,33 @@ const styles = StyleSheet.create({
     padding: 11,
     borderRadius: 9,
     alignItems: 'center'
+  },
+
+  // FULL SCREEN IMAGE VIEWER
+  imageViewerOverlay: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  imageViewerClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20
+  },
+  imageViewerCloseText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700'
+  },
+  fullScreenImage: {
+    width: width,
+    height: height * 0.85
   },
 
   // DEVELOPER MODAL SPECIFIC

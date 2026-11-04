@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version tag (e.g. v2.0.0, v2.0.1)'
+        description: 'Release version tag (e.g. v2.1.0, v2.1.1)'
         required: false
-        default: 'v2.0.0'
+        default: 'v2.1.0'
 
 permissions:
   contents: write
@@ -43,6 +43,21 @@ jobs:
       - name: Prebuild Android Native Project
         working-directory: ./mobile
         run: npx expo prebuild --platform android --no-install
+
+      - name: Configure Custom Splash Screen & Brand Theme
+        working-directory: ./mobile
+        run: |
+          # Override white splash screen background with sleek TradeMind dark theme (#070b14)
+          if [ -f "android/app/src/main/res/values/colors.xml" ]; then
+            sed -i 's/<color name="splashscreen_background">#FFFFFF<\/color>/<color name="splashscreen_background">#070b14<\/color>/g' android/app/src/main/res/values/colors.xml || true
+            sed -i 's/<color name="splashscreen_background">.*<\/color>/<color name="splashscreen_background">#070b14<\/color>/g' android/app/src/main/res/values/colors.xml || true
+          fi
+          # Replace default expo wireframe oval logo with official TradeMind high-res logo
+          for d in drawable-mdpi drawable-hdpi drawable-xhdpi drawable-xxhdpi drawable-xxxhdpi drawable; do
+            if [ -d "android/app/src/main/res/$d" ]; then
+              cp -f assets/splash.png android/app/src/main/res/$d/splashscreen_logo.png || true
+            fi
+          done
 
       - name: Generate Official TradeMind Release Keystore
         working-directory: ./mobile/android/app
@@ -93,7 +108,7 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.version }}"
           if [ -z "$TAG" ]; then
-            TAG="v2.0.0"
+            TAG="v2.1.0"
           fi
           echo "TAG_NAME=$TAG" >> $GITHUB_OUTPUT
 
@@ -107,14 +122,15 @@ jobs:
             ### 📱 TradeMind Production Release APK (${{ steps.vars.outputs.TAG_NAME }})
             Official Android Release created & architected by **Abhishek**.
             
-            **✨ Release Highlights:**
-            - **Cinematic Opening Animation & Picture**: Glowing AI neural brain circuit with smooth spring entrance and developer signature.
-            - **Developer Profile Spotlight**: Dedicated section showcasing Abhishek (Lead Systems Architect & Quant Developer).
-            - **Fluid 60 FPS Micro-Interactions**: Smooth animated tab transitions, card press animations, and modal slide-ups.
-            - **Active Trade Management**: 1-tap Close Position & Edit Position with live P&L calculations.
-            - **100% Standalone Offline**: Bundled `index.android.bundle` directly inside the APK (Zero Metro dependency).
-            - **Play Store-Grade Security**: Signed with official TradeMind RSA 2048 certificate (27-year validity).
-            - **Ultra-Optimized Binary**: ~21 MB arm64-v8a single-architecture APK for fast download and instant execution.
+            **✨ Release v2.1.0 Highlights & Enhancements:**
+            - 🚀 **Removed White Wireframe Splash Screen**: Custom dark theme boot window (`#070b14`) with crisp TradeMind logo (no white screen or wireframe rings).
+            - 📲 **Mobile Number Sign In & Sign Up with OTP**: Fast phone verification with instant 4-digit SMS OTP code generator.
+            - 🔒 **Permanent Safe Data Persistence**: Master registry architecture (`tm_master_users_registry_v1`) ensuring your accounts and trades are 100% safe across all future updates.
+            - 🔙 **Smart Hardware Back Button Navigation**: Closes active modals (Edit, Close, Images, Dev profile), returns to Dashboard from other tabs, and prevents accidental app exit.
+            - 🖼️ **Trade Chart Screenshot Attachment**: Capture and attach trade chart photos with instant previews and full-screen zoomable viewer.
+            - 🚪 **Sign Out Confirmation Prompt**: Redesigned header (removed accidental sign-out button); sign-out is now protected with a confirmation dialog in Account & Security.
+            - 👨‍💻 **Developer Profile Spotlight**: Dedicated Abhishek showcase modal with verified GitHub links and project credentials.
+            - ⚡ **Ultra-Optimized Standalone Binary**: 100% offline Hermes bundle, signed with official TradeMind RSA 2048 Play Store-grade certificate.
             
             **📲 Installation:**
             1. Download `TradeMind.apk` below directly to your smartphone.
