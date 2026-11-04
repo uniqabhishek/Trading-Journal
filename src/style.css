@@ -215,31 +215,48 @@ button, input, select, textarea {
 .main-content {
   margin-left: 260px;
   width: calc(100% - 260px);
-  padding: 30px 40px;
+  padding: 24px 32px;
   max-width: 1400px;
 }
 
 /* TOPBAR */
 .topbar {
+  margin-bottom: 24px;
+}
+
+.topbar-main-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 28px;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 14px;
 }
 
-.eyebrow {
-  display: block;
-  font-size: 11px;
-  letter-spacing: 1.4px;
+.mobile-brand-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.25);
   color: var(--cyan);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
   font-weight: 700;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
+}
+
+.user-dot {
+  color: var(--text-muted);
+}
+
+.user-name-small {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .page-heading h2 {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 800;
   letter-spacing: -0.5px;
 }
@@ -247,7 +264,7 @@ button, input, select, textarea {
 .topbar-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .currency-pill {
@@ -256,14 +273,8 @@ button, input, select, textarea {
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 9px;
-  padding: 3px 6px;
-  gap: 4px;
-}
-
-.pill-label {
-  font-size: 11px;
-  color: var(--text-muted);
-  padding-left: 6px;
+  padding: 3px 5px;
+  gap: 3px;
 }
 
 .cur-btn {
@@ -272,9 +283,10 @@ button, input, select, textarea {
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 700;
-  padding: 4px 8px;
+  padding: 5px 8px;
   border-radius: 6px;
   cursor: pointer;
+  transition: all 0.15s;
 }
 
 .cur-btn.active {
@@ -308,7 +320,7 @@ button, input, select, textarea {
   background: rgba(244, 63, 94, 0.12);
   border: 1px solid rgba(244, 63, 94, 0.35);
   color: var(--red);
-  padding: 8px 14px;
+  padding: 8px 12px;
   border-radius: 9px;
   font-size: 12px;
   font-weight: 700;
@@ -328,8 +340,8 @@ button, input, select, textarea {
 /* FLOATING TOAST */
 .floating-toast {
   position: fixed;
-  bottom: 28px;
-  right: 28px;
+  bottom: 24px;
+  right: 24px;
   background: #0f172a;
   border: 1px solid var(--green);
   color: #fff;
@@ -376,14 +388,14 @@ button, input, select, textarea {
 .tab-pane {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
 .glass-panel {
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 16px;
-  padding: 24px;
+  padding: 22px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 
@@ -391,13 +403,13 @@ button, input, select, textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
   flex-wrap: wrap;
   gap: 12px;
 }
 
 .panel-header h3 {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   color: #fff;
 }
@@ -417,17 +429,17 @@ button, input, select, textarea {
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 18px;
+  gap: 16px;
 }
 
 .stat-card {
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 20px;
+  border-radius: 14px;
+  padding: 18px;
   display: flex;
   align-items: flex-start;
-  gap: 16px;
+  gap: 14px;
   transition: transform 0.15s ease, border-color 0.15s ease;
 }
 
@@ -437,8 +449,8 @@ button, input, select, textarea {
 }
 
 .stat-icon-wrapper {
-  width: 46px;
-  height: 46px;
+  width: 44px;
+  height: 44px;
   border-radius: 12px;
   display: flex;
   align-items: center;
@@ -448,7 +460,7 @@ button, input, select, textarea {
 
 .stat-label {
   display: block;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
   font-weight: 600;
   text-transform: uppercase;
@@ -456,10 +468,10 @@ button, input, select, textarea {
 }
 
 .stat-value {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 800;
   color: #fff;
-  margin: 6px 0 4px;
+  margin: 4px 0 2px;
   letter-spacing: -0.5px;
 }
 
@@ -471,12 +483,157 @@ button, input, select, textarea {
 
 .green { color: var(--green) !important; }
 .red { color: var(--red) !important; }
+.white { color: #fff !important; }
+
+/* ACTIVE RUNNING POSITIONS BANNER */
+.active-positions-panel {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.05) 0%, var(--bg-panel) 100%);
+}
+
+.live-indicator-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pulse-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--amber);
+  box-shadow: 0 0 10px var(--amber);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.9); opacity: 0.8; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.8; }
+}
+
+.active-trades-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.active-trade-card {
+  background: #090e1a;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.active-trade-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.symbol-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trade-symbol {
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.active-trade-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.trade-param {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trade-param span {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.trade-param b {
+  font-size: 13px;
+  color: #fff;
+}
+
+.active-trade-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.btn-close-action {
+  flex: 1;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+  border: 0;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+
+.btn-close-action:hover {
+  background: linear-gradient(135deg, #34d399, #10b981);
+}
+
+.btn-edit-action {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btn-edit-action:hover {
+  background: var(--bg-hover);
+  color: #fff;
+}
+
+.btn-trash-action {
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  color: var(--red);
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btn-trash-action:hover {
+  background: rgba(244, 63, 94, 0.25);
+}
 
 /* CHARTS */
 .chart-container {
   width: 100%;
-  min-height: 320px;
-  margin-top: 10px;
+  min-height: 280px;
+  margin-top: 8px;
 }
 
 .empty-chart {
@@ -484,7 +641,7 @@ button, input, select, textarea {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 260px;
+  min-height: 240px;
   color: var(--text-muted);
   text-align: center;
   gap: 12px;
@@ -523,14 +680,14 @@ button, input, select, textarea {
 .trade-grid-form {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
+  gap: 18px;
   margin-top: 10px;
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
 }
 
 .field label {
@@ -543,7 +700,7 @@ button, input, select, textarea {
   background: var(--bg-main);
   border: 1px solid var(--border);
   border-radius: 9px;
-  padding: 12px 14px;
+  padding: 11px 13px;
   font-size: 13px;
   color: #fff;
   outline: none;
@@ -568,7 +725,7 @@ button, input, select, textarea {
 .toggle-btn {
   background: var(--bg-main);
   border: 1px solid var(--border);
-  padding: 11px;
+  padding: 10px;
   border-radius: 8px;
   font-size: 12px;
   font-weight: 700;
@@ -618,7 +775,7 @@ button, input, select, textarea {
   background: rgba(59, 130, 246, 0.08);
   border: 1px dashed rgba(59, 130, 246, 0.3);
   border-radius: 10px;
-  padding: 14px 18px;
+  padding: 12px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -647,10 +804,10 @@ button, input, select, textarea {
   background: linear-gradient(135deg, #2563eb, #1d4ed8);
   border: 0;
   color: #fff;
-  padding: 13px 24px;
+  padding: 12px 22px;
   border-radius: 10px;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   box-shadow: 0 4px 14px var(--primary-glow);
   transition: all 0.15s ease;
@@ -665,7 +822,7 @@ button, input, select, textarea {
   background: var(--primary);
   border: 0;
   color: #fff;
-  padding: 8px 14px;
+  padding: 7px 13px;
   border-radius: 8px;
   font-size: 12px;
   font-weight: 700;
@@ -679,7 +836,7 @@ button, input, select, textarea {
   background: transparent;
   border: 1px solid var(--border-light);
   color: var(--text-secondary);
-  padding: 8px 14px;
+  padding: 7px 13px;
   border-radius: 8px;
   font-size: 12px;
   font-weight: 600;
@@ -721,7 +878,7 @@ button, input, select, textarea {
   border-radius: 9px;
   padding: 8px 12px;
   flex: 1;
-  min-width: 220px;
+  min-width: 200px;
   color: var(--text-muted);
 }
 
@@ -763,8 +920,14 @@ button, input, select, textarea {
   margin-left: auto;
 }
 
-/* TABLES */
-.table-responsive {
+/* RESPONSIVE TRADES LIST */
+.trade-list-container {
+  width: 100%;
+}
+
+/* 1. DESKTOP VIEW: TABLE */
+.desktop-table-wrap {
+  display: block;
   overflow-x: auto;
 }
 
@@ -786,13 +949,17 @@ button, input, select, textarea {
 }
 
 .modern-table td {
-  padding: 14px;
+  padding: 12px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   vertical-align: middle;
 }
 
 .modern-table tbody tr:hover {
   background: rgba(255, 255, 255, 0.02);
+}
+
+.row-open-trade {
+  background: rgba(245, 158, 11, 0.03);
 }
 
 .cell-date {
@@ -854,6 +1021,10 @@ button, input, select, textarea {
   color: var(--text-secondary);
 }
 
+.open-dash {
+  color: var(--text-muted);
+}
+
 .status-open-pill {
   font-size: 10px;
   font-weight: 800;
@@ -861,6 +1032,7 @@ button, input, select, textarea {
   color: var(--amber);
   padding: 3px 8px;
   border-radius: 5px;
+  letter-spacing: 0.5px;
 }
 
 .pnl-val {
@@ -868,12 +1040,57 @@ button, input, select, textarea {
   font-weight: 700;
 }
 
+.cell-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.btn-quick-close {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: var(--green);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-quick-close:hover {
+  background: rgba(16, 185, 129, 0.3);
+}
+
+.btn-action-icon {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+
+.btn-action-icon:hover {
+  background: var(--bg-hover);
+  color: #fff;
+  border-color: var(--border-light);
+}
+
 .btn-trash {
   background: transparent;
   border: 0;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 6px;
+  padding: 5px;
   border-radius: 6px;
   transition: all 0.15s;
 }
@@ -881,6 +1098,111 @@ button, input, select, textarea {
 .btn-trash:hover {
   background: rgba(244, 63, 94, 0.15);
   color: var(--red);
+}
+
+/* 2. MOBILE VIEW: COMPACT TRADE CARDS */
+.mobile-trade-cards {
+  display: none;
+}
+
+.mobile-card {
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mobile-card.card-open {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.02);
+}
+
+.mobile-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mobile-symbol-block {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mobile-symbol {
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.mobile-market-tag {
+  font-size: 9px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+
+.mobile-pnl-block {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.mobile-card-details {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 8px;
+  text-align: center;
+}
+
+.m-detail-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.m-lbl {
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.m-val {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  font-family: monospace;
+}
+
+.m-val.emotion {
+  font-family: inherit;
+  color: var(--cyan);
+  font-size: 11px;
+}
+
+.mobile-card-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.m-date {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.m-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .empty-table {
@@ -1051,7 +1373,7 @@ button, input, select, textarea {
   background: #0d1527;
   border: 1px solid #1e2e4f;
   border-radius: 20px;
-  padding: 36px 32px;
+  padding: 34px 28px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
 }
 
@@ -1125,39 +1447,80 @@ button, input, select, textarea {
   font-weight: 600;
 }
 
-.form-group input {
+.form-group input, .form-group select, .form-group textarea {
   background: #080d18;
   border: 1px solid var(--border);
   border-radius: 9px;
-  padding: 13px 14px;
+  padding: 12px 14px;
   font-size: 13px;
   color: #fff;
   outline: none;
   transition: border-color 0.15s;
 }
 
-.form-group input:focus {
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px var(--primary-glow);
+}
+
+.password-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrap input {
+  width: 100%;
+  padding-right: 42px;
+}
+
+.btn-toggle-eye {
+  position: absolute;
+  right: 12px;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
 }
 
 .error-box {
   background: rgba(244, 63, 94, 0.15);
   border: 1px solid rgba(244, 63, 94, 0.4);
   color: #fecdd3;
-  padding: 10px 14px;
+  padding: 12px 14px;
   border-radius: 8px;
   font-size: 12px;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.error-text-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.error-link-btn {
+  background: transparent;
+  border: 0;
+  color: var(--cyan);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-align: left;
+  padding: 0;
+  margin-top: 2px;
 }
 
 .auth-divider {
   display: flex;
   align-items: center;
   text-align: center;
-  margin: 20px 0;
+  margin: 18px 0;
   color: var(--text-muted);
   font-size: 10px;
   letter-spacing: 1.2px;
@@ -1203,6 +1566,137 @@ button, input, select, textarea {
   line-height: 1.4;
 }
 
+/* MODALS */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 7, 14, 0.8);
+  backdrop-filter: blur(6px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-content {
+  background: #0d1527;
+  border: 1px solid #1e2e4f;
+  border-radius: 18px;
+  padding: 24px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal-content.large {
+  max-width: 600px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.modal-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.modal-symbol {
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.modal-title-wrap h3 {
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.modal-close-btn:hover {
+  background: var(--bg-hover);
+  color: #fff;
+}
+
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-summary-box {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: #070b14;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.modal-param {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.modal-param span {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.modal-param b {
+  font-size: 13px;
+  color: #fff;
+}
+
+.form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.form-row-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
 /* RESPONSIVE DESIGN */
 @media (max-width: 1024px) {
   .stats-grid {
@@ -1212,12 +1706,12 @@ button, input, select, textarea {
 
 @media (max-width: 800px) {
   .sidebar {
-    width: 210px;
+    width: 200px;
   }
   .main-content {
-    margin-left: 210px;
-    width: calc(100% - 210px);
-    padding: 24px;
+    margin-left: 200px;
+    width: calc(100% - 200px);
+    padding: 20px;
   }
   .trade-grid-form {
     grid-template-columns: 1fr;
@@ -1242,27 +1736,39 @@ button, input, select, textarea {
   }
   .topbar {
     margin-bottom: 16px;
-    gap: 8px;
+  }
+  .topbar-main-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .topbar-actions {
+    justify-content: space-between;
+    width: 100%;
   }
   .page-heading h2 {
-    font-size: 20px;
+    font-size: 19px;
   }
   .nav-menu {
     flex-direction: row;
     overflow-x: auto;
     padding-bottom: 4px;
     gap: 6px;
+    -webkit-overflow-scrolling: touch;
   }
   .nav-menu button {
     white-space: nowrap;
     font-size: 11px;
-    padding: 7px 10px;
+    padding: 8px 10px;
   }
   .mobile-signout-btn {
     display: flex;
     color: var(--red) !important;
     background: rgba(244, 63, 94, 0.1) !important;
     border-color: rgba(244, 63, 94, 0.3) !important;
+  }
+  .sidebar-footer {
+    display: none;
   }
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -1288,11 +1794,11 @@ button, input, select, textarea {
     font-size: 10px;
   }
   .glass-panel {
-    padding: 16px;
+    padding: 16px 14px;
     border-radius: 14px;
   }
   .chart-container {
-    min-height: 240px;
+    min-height: 220px;
   }
   .history-toolbar {
     flex-direction: column;
@@ -1315,9 +1821,28 @@ button, input, select, textarea {
   }
   .action-buttons button {
     flex: 1;
-    padding: 7px;
+    padding: 8px;
   }
-  .sidebar-footer {
+
+  /* TOGGLE DESKTOP TABLE OFF, MOBILE CARDS ON */
+  .desktop-table-wrap {
     display: none;
+  }
+  .mobile-trade-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .form-row-2, .form-row-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-content {
+    padding: 18px 14px;
+  }
+  .modal-summary-box {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
   }
 }

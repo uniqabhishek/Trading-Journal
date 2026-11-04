@@ -1,18 +1,33 @@
-let rawApi = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000/api';
-if (!rawApi.startsWith('http://') && !rawApi.startsWith('https://') && !rawApi.startsWith('/')) {
+// TradeMind API & Offline-First Client Architecture
+// Ensures 100% reliable local client persistence on GitHub Pages and handles multi-user authentication.
+
+let rawApi = import.meta.env.VITE_API_URL || '';
+if (rawApi && !rawApi.startsWith('http://') && !rawApi.startsWith('https://') && !rawApi.startsWith('/')) {
   rawApi = `https://${rawApi}`;
 }
 const baseApi = rawApi.replace(/\/+$/, '');
-const API = baseApi.endsWith('/api') ? baseApi : `${baseApi}/api`;
+const API = baseApi ? (baseApi.endsWith('/api') ? baseApi : `${baseApi}/api`) : '';
 
-const USERS_STORAGE_KEY = 'tm_registered_users_v2';
-const SESSION_KEY = 'tm_active_session_v2';
-const TOKEN_KEY = 'tm_token';
+const USERS_STORAGE_KEY = 'tm_registered_users_v3';
+const SESSION_KEY = 'tm_active_session_v3';
+const TOKEN_KEY = 'tm_token_v3';
 
-// Starter demo trades for the demo profile
-const DEMO_TRADES = [
+// Helper to determine if we should execute directly in local offline mode
+function isLocalMode() {
+  if (!API) return true;
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    const isRemote = host !== 'localhost' && host !== '127.0.0.1';
+    if (isRemote && (API.includes('127.0.0.1') || API.includes('localhost'))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Starter sample trades
+export const SAMPLE_TRADES_TEMPLATE = [
   {
-    id: 101,
     market: 'CRYPTO',
     exchange: 'Delta Exchange',
     symbol: 'BTCUSDT',
@@ -34,7 +49,6 @@ const DEMO_TRADES = [
     closed_at: new Date(Date.now() - 86400000 * 3).toISOString()
   },
   {
-    id: 102,
     market: 'CRYPTO',
     exchange: 'Delta Exchange',
     symbol: 'ETHUSDT',
@@ -56,7 +70,6 @@ const DEMO_TRADES = [
     closed_at: new Date(Date.now() - 86400000 * 2).toISOString()
   },
   {
-    id: 103,
     market: 'FOREX',
     exchange: 'Exness',
     symbol: 'EURUSD',
@@ -78,55 +91,56 @@ const DEMO_TRADES = [
     closed_at: new Date(Date.now() - 86400000 * 1).toISOString()
   },
   {
-    id: 104,
     market: 'CRYPTO',
     exchange: 'Binance',
     symbol: 'SOLUSDT',
     direction: 'LONG',
-    status: 'CLOSED',
+    status: 'OPEN',
     entry_price: 142.50,
-    exit_price: 136.20,
+    exit_price: null,
     quantity: 5,
     leverage: 5,
     fees: 4,
     other_costs: 0,
-    gross_pnl: -31.50,
-    net_pnl: -35.50,
+    gross_pnl: null,
+    net_pnl: null,
     strategy: 'Support Bounce',
-    emotion: 'Anxious',
-    tags: 'sol, stoploss',
-    notes: 'Cut early after losing volume momentum.',
-    created_at: new Date(Date.now() - 86400000 * 1.5).toISOString(),
-    closed_at: new Date(Date.now() - 86400000 * 1).toISOString()
-  },
-  {
-    id: 105,
-    market: 'FOREX',
-    exchange: 'XM',
-    symbol: 'XAUUSD',
-    direction: 'LONG',
-    status: 'CLOSED',
-    entry_price: 2680,
-    exit_price: 2715,
-    quantity: 0.5,
-    leverage: 50,
-    fees: 10,
-    other_costs: 0,
-    gross_pnl: 175,
-    net_pnl: 165,
-    strategy: 'Gold Supply Pullback',
-    emotion: 'Disciplined',
-    tags: 'gold, xauusd, trend',
-    notes: 'Strong gold demand continuation.',
-    created_at: new Date(Date.now() - 86400000 * 0.8).toISOString(),
-    closed_at: new Date().toISOString()
+    emotion: 'Confident',
+    tags: 'sol, swing, active',
+    notes: 'Holding active breakout position.',
+    created_at: new Date(Date.now() - 86400000 * 0.5).toISOString(),
+    closed_at: null
   }
 ];
 
-function getStoredUsers() {
+function generateDeterministicUserId(email) {
+  // Generates a stable unique ID from the user's email so trades are NEVER lost across logins
+  try {
+    const clean = email.trim().toLowerCase();
+    let hash = 0;
+    for (let i = 0; i < clean.length; i++) {
+      hash = ((hash << 5) - hash) + clean.charCodeAt(i);
+      hash |= 0;
+    }
+    const safePart = clean.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 15);
+    return `u_${safePart}_${Math.abs(hash)}`;
+  } catch {
+    return `u_${Date.now()}`;
+  }
+}
+
+export function getStoredUsers() {
   try {
     const raw = localStorage.getItem(USERS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (raw) return JSON.parse(raw);
+    // Legacy migration from v2 if available
+    const legacyRaw = localStorage.getItem('tm_registered_users_v2');
+    if (legacyRaw) {
+      const users = JSON.parse(legacyRaw);
+      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+      return users;
+    }
+    return [];
   } catch {
     return [];
   }
@@ -136,16 +150,19 @@ function saveStoredUsers(users) {
   localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
 }
 
-function getActiveSession() {
+export function getActiveSession() {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (raw) return JSON.parse(raw);
+    const legacy = localStorage.getItem('tm_active_session_v2');
+    if (legacy) return JSON.parse(legacy);
+    return null;
   } catch {
     return null;
   }
 }
 
-function saveActiveSession(session) {
+export function saveActiveSession(session) {
   if (session) {
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
     localStorage.setItem(TOKEN_KEY, session.token);
@@ -155,7 +172,7 @@ function saveActiveSession(session) {
   }
 }
 
-function getUserTradesKey(userId) {
+export function getUserTradesKey(userId) {
   return `tm_trades_u_${userId}`;
 }
 
@@ -165,8 +182,9 @@ export function getUserTrades(userId) {
     const raw = localStorage.getItem(key);
     if (!raw) {
       if (userId === 'demo-user') {
-        localStorage.setItem(key, JSON.stringify(DEMO_TRADES));
-        return DEMO_TRADES;
+        const demoTrades = SAMPLE_TRADES_TEMPLATE.map((t, idx) => ({ ...t, id: 100 + idx }));
+        localStorage.setItem(key, JSON.stringify(demoTrades));
+        return demoTrades;
       }
       return [];
     }
@@ -181,9 +199,9 @@ export function saveUserTrades(userId, trades) {
 }
 
 export function loadSampleTradesForUser(userId) {
-  const seeded = DEMO_TRADES.map(t => ({
+  const seeded = SAMPLE_TRADES_TEMPLATE.map((t, idx) => ({
     ...t,
-    id: Date.now() + Math.floor(Math.random() * 1000)
+    id: Date.now() + idx + Math.floor(Math.random() * 500)
   }));
   saveUserTrades(userId, seeded);
   return seeded;
@@ -194,8 +212,9 @@ export function clearUserTrades(userId) {
   return [];
 }
 
-function calculateDashboardStats(trades) {
+export function calculateDashboardStats(trades) {
   const closed = trades.filter(t => t.status === 'CLOSED');
+  const openPositions = trades.filter(t => t.status === 'OPEN');
   const pnls = closed.map(t => Number(t.net_pnl || 0));
   const wins = pnls.filter(p => p > 0);
   const losses = pnls.filter(p => p < 0);
@@ -210,26 +229,26 @@ function calculateDashboardStats(trades) {
 
   return {
     total_trades: closed.length,
-    open_trades: trades.filter(t => t.status === 'OPEN').length,
+    open_trades: openPositions.length,
     winning_trades: wins.length,
     losing_trades: losses.length,
     win_rate: winRate,
-    net_pnl: totalNet,
-    gross_profit: grossProfit,
-    gross_loss: grossLoss,
+    net_pnl: Number(totalNet.toFixed(2)),
+    gross_profit: Number(grossProfit.toFixed(2)),
+    gross_loss: Number(grossLoss.toFixed(2)),
     profit_factor: profitFactor,
-    avg_win: avgWin,
-    avg_loss: avgLoss,
+    avg_win: Number(avgWin.toFixed(2)),
+    avg_loss: Number(avgLoss.toFixed(2)),
     risk_reward: riskReward
   };
 }
 
 function handleOfflineRequest(path, options = {}) {
   const method = (options.method || 'GET').toUpperCase();
-  const body = options.body ? JSON.parse(options.body) : {};
+  const body = options.body ? (typeof options.body === 'string' ? JSON.parse(options.body) : options.body) : {};
   const session = getActiveSession();
 
-  // REGISTER: Creates a real individual account
+  // 1. REGISTER: Enforce unique email check & persistent account creation
   if (path === '/auth/register') {
     const name = (body.name || '').trim();
     const email = (body.email || '').trim().toLowerCase();
@@ -240,12 +259,14 @@ function handleOfflineRequest(path, options = {}) {
     if (!password || password.length < 6) throw new Error('Password must be at least 6 characters.');
 
     const users = getStoredUsers();
-    if (users.find(u => u.email === email)) {
-      throw new Error('This email is already registered. Please sign in instead.');
+    const existing = users.find(u => u.email === email);
+    if (existing) {
+      throw new Error('An account with this email already exists. Please click "Sign In" instead.');
     }
 
+    const userId = generateDeterministicUserId(email);
     const newUser = {
-      id: 'u_' + Date.now(),
+      id: userId,
       name,
       email,
       password,
@@ -255,17 +276,20 @@ function handleOfflineRequest(path, options = {}) {
     users.push(newUser);
     saveStoredUsers(users);
 
-    // Initial empty trade journal for the newly registered user
-    saveUserTrades(newUser.id, []);
+    // Initialize or keep existing trades for this user ID if any
+    const existingTrades = getUserTrades(userId);
+    if (!existingTrades || existingTrades.length === 0) {
+      saveUserTrades(userId, []);
+    }
 
-    const token = `tm_token_${newUser.id}_${Date.now()}`;
+    const token = `tm_token_${userId}_${Date.now()}`;
     const userSafe = { id: newUser.id, name: newUser.name, email: newUser.email, isDemo: false };
     saveActiveSession({ token, userId: newUser.id, user: userSafe });
 
     return { access_token: token, user: userSafe };
   }
 
-  // LOGIN: Verifies real registered accounts
+  // 2. LOGIN: Verify credentials against stored users
   if (path === '/auth/login') {
     const email = (body.email || '').trim().toLowerCase();
     const password = body.password || '';
@@ -276,7 +300,7 @@ function handleOfflineRequest(path, options = {}) {
     const existing = users.find(u => u.email === email);
 
     if (!existing) {
-      throw new Error('No account found with this email. Please click "Create an account" below.');
+      throw new Error('No registered account found with this email. Please click "Create Account" below.');
     }
 
     if (existing.password !== password) {
@@ -290,7 +314,7 @@ function handleOfflineRequest(path, options = {}) {
     return { access_token: token, user: userSafe };
   }
 
-  // DEMO MODE: Dedicated separate demo profile
+  // 3. DEMO MODE: Dedicated separate demo profile
   if (path === '/auth/demo') {
     const demoUser = {
       id: 'demo-user',
@@ -300,12 +324,11 @@ function handleOfflineRequest(path, options = {}) {
     };
     const token = 'tm_token_demo_mode';
     saveActiveSession({ token, userId: 'demo-user', user: demoUser });
-    // Ensure demo user trades are initialized
     getUserTrades('demo-user');
     return { access_token: token, user: demoUser };
   }
 
-  // CURRENT USER
+  // 4. CURRENT USER
   if (path === '/auth/me') {
     if (!session || !session.user) {
       throw new Error('Unauthorized');
@@ -313,7 +336,7 @@ function handleOfflineRequest(path, options = {}) {
     return session.user;
   }
 
-  // DATA ROUTES REQUIRE ACTIVE USER
+  // 5. DATA ROUTES (REQUIRE ACTIVE USER)
   const userId = session?.userId || 'guest';
 
   if (path === '/dashboard') {
@@ -328,12 +351,13 @@ function handleOfflineRequest(path, options = {}) {
     if (method === 'POST') {
       const trades = getUserTrades(userId);
       const entry = Number(body.entry_price || 0);
-      const exit = body.exit_price !== undefined && body.exit_price !== '' ? Number(body.exit_price) : null;
+      const isClosed = (body.status || 'CLOSED').toUpperCase() === 'CLOSED';
+      const exit = isClosed && body.exit_price !== undefined && body.exit_price !== '' ? Number(body.exit_price) : null;
       const qty = Number(body.quantity || 0);
       const fees = Number(body.fees || 0);
       const other = Number(body.other_costs || 0);
 
-      let gross = body.gross_pnl !== undefined && body.gross_pnl !== '' ? Number(body.gross_pnl) : null;
+      let gross = body.gross_pnl !== undefined && body.gross_pnl !== '' && body.gross_pnl !== null ? Number(body.gross_pnl) : null;
       if (gross === null && exit !== null) {
         gross = body.direction === 'LONG' ? (exit - entry) * qty : (entry - exit) * qty;
       }
@@ -345,7 +369,7 @@ function handleOfflineRequest(path, options = {}) {
         exchange: body.exchange || '',
         symbol: (body.symbol || 'BTCUSDT').toUpperCase(),
         direction: (body.direction || 'LONG').toUpperCase(),
-        status: (body.status || 'CLOSED').toUpperCase(),
+        status: isClosed ? 'CLOSED' : 'OPEN',
         entry_price: entry,
         exit_price: exit,
         quantity: qty,
@@ -358,8 +382,8 @@ function handleOfflineRequest(path, options = {}) {
         emotion: body.emotion || 'Confident',
         tags: body.tags || '',
         notes: body.notes || '',
-        created_at: new Date().toISOString(),
-        closed_at: exit !== null ? new Date().toISOString() : null
+        created_at: body.created_at || new Date().toISOString(),
+        closed_at: isClosed ? (body.closed_at || new Date().toISOString()) : null
       };
 
       trades.unshift(newTrade);
@@ -368,16 +392,49 @@ function handleOfflineRequest(path, options = {}) {
     }
   }
 
+  // TRADE DETAIL OPERATIONS (PUT to update / close trade, DELETE to delete trade)
   if (path.startsWith('/trades/')) {
     const id = Number(path.replace('/trades/', ''));
     let trades = getUserTrades(userId);
+
     if (method === 'DELETE') {
       trades = trades.filter(t => t.id !== id);
       saveUserTrades(userId, trades);
       return { success: true };
     }
+
     if (method === 'PUT') {
-      trades = trades.map(t => t.id === id ? { ...t, ...body } : t);
+      trades = trades.map(t => {
+        if (t.id !== id) return t;
+
+        const updated = { ...t, ...body };
+        const entry = Number(updated.entry_price || 0);
+        const qty = Number(updated.quantity || 0);
+        const fees = Number(updated.fees || 0);
+        const other = Number(updated.other_costs || 0);
+        const isClosed = updated.status === 'CLOSED';
+
+        if (isClosed && updated.exit_price !== null && updated.exit_price !== undefined && updated.exit_price !== '') {
+          const exit = Number(updated.exit_price);
+          let gross = updated.gross_pnl !== undefined && updated.gross_pnl !== null && updated.gross_pnl !== ''
+            ? Number(updated.gross_pnl)
+            : (updated.direction === 'LONG' ? (exit - entry) * qty : (entry - exit) * qty);
+
+          updated.gross_pnl = Number(gross.toFixed(2));
+          updated.net_pnl = Number((gross - fees - other).toFixed(2));
+          if (!updated.closed_at) {
+            updated.closed_at = new Date().toISOString();
+          }
+        } else if (!isClosed) {
+          updated.exit_price = null;
+          updated.gross_pnl = null;
+          updated.net_pnl = null;
+          updated.closed_at = null;
+        }
+
+        return updated;
+      });
+
       saveUserTrades(userId, trades);
       return trades.find(t => t.id === id);
     }
@@ -387,20 +444,23 @@ function handleOfflineRequest(path, options = {}) {
 }
 
 export function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
+  return localStorage.getItem(TOKEN_KEY) || localStorage.getItem('tm_token');
 }
 
 export function clearSession() {
   saveActiveSession(null);
+  localStorage.removeItem('tm_token');
 }
 
 export async function api(path, options = {}) {
-  // If demo mode or explicitly offline token, execute locally
-  const token = getToken();
-  const session = getActiveSession();
+  // If running in local client mode (e.g. GitHub Pages without separate backend)
+  // or path is demo/auth/has offline token:
+  if (isLocalMode() || path.startsWith('/auth/demo') || path.startsWith('/auth/register') || path.startsWith('/auth/login')) {
+    return handleOfflineRequest(path, options);
+  }
 
-  // If path is auth or we have a local session token, check local handler first
-  if (path.startsWith('/auth/demo') || token?.startsWith('tm_token_')) {
+  const token = getToken();
+  if (token?.startsWith('tm_token_')) {
     return handleOfflineRequest(path, options);
   }
 
@@ -424,7 +484,7 @@ export async function api(path, options = {}) {
     }
     return data;
   } catch (err) {
-    // If backend connection refused / offline, handle in offline store seamlessly
+    // If backend connection fails, seamlessly fallback to local store
     return handleOfflineRequest(path, options);
   }
 }

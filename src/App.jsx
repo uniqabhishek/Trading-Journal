@@ -3,7 +3,6 @@ import {
   api,
   getToken,
   clearSession,
-  getUserTrades,
   loadSampleTradesForUser,
   clearUserTrades
 } from './api'
@@ -19,7 +18,6 @@ import {
   TrendingUp,
   TrendingDown,
   Target,
-  DollarSign,
   Activity,
   Award,
   ShieldCheck,
@@ -28,19 +26,22 @@ import {
   Search,
   Filter,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Edit2,
+  X,
+  Eye,
+  EyeOff,
+  Clock,
+  ArrowRight
 } from 'lucide-react'
 import {
   AreaChart,
   Area,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
-  Cell
+  ResponsiveContainer
 } from 'recharts'
 
 const CURRENCY_CONFIG = {
@@ -80,6 +81,7 @@ export default function App() {
   const [token, setToken] = useState(getToken())
   const [authMode, setAuthMode] = useState('login')
   const [auth, setAuth] = useState({ name: '', email: '', password: '' })
+  const [showPassword, setShowPassword] = useState(false)
   const [user, setUser] = useState(null)
   const [tab, setTab] = useState('dashboard')
   const [currency, setCurrency] = useState('INR')
@@ -89,6 +91,11 @@ export default function App() {
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
   const [busy, setBusy] = useState(false)
+
+  // Modals for Close Trade and Edit Trade
+  const [closingTrade, setClosingTrade] = useState(null)
+  const [closeForm, setCloseForm] = useState({ exit_price: '', fees: '0', emotion: 'Confident', notes: '' })
+  const [editingTrade, setEditingTrade] = useState(null)
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState('')
@@ -176,21 +183,29 @@ export default function App() {
     showToast('Signed out successfully.')
   }
 
+  // 1. ADD TRADE
   async function handleAddTrade(e) {
     e.preventDefault()
     setError('')
     setBusy(true)
     try {
+      const isClosed = form.status === 'CLOSED'
       const payload = {
         ...form,
         entry_price: Number(form.entry_price),
         quantity: Number(form.quantity),
         leverage: Number(form.leverage || 1),
         fees: Number(form.fees || 0),
-        other_costs: Number(form.other_costs || 0)
+        other_costs: Number(form.other_costs || 0),
+        status: isClosed ? 'CLOSED' : 'OPEN'
       }
-      if (form.exit_price !== '') payload.exit_price = Number(form.exit_price)
-      if (form.market === 'FOREX' && form.gross_pnl !== '') {
+      if (isClosed && form.exit_price !== '') {
+        payload.exit_price = Number(form.exit_price)
+      } else {
+        payload.exit_price = null
+      }
+
+      if (form.market === 'FOREX' && isClosed && form.gross_pnl !== '') {
         payload.gross_pnl = Number(form.gross_pnl)
       }
 
@@ -198,7 +213,7 @@ export default function App() {
       setForm(emptyTrade)
       await loadData()
       setTab('history')
-      showToast('Trade successfully recorded! 🚀')
+      showToast(isClosed ? 'Trade recorded and closed! 🚀' : 'Active open position recorded! 🟢')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -206,6 +221,7 @@ export default function App() {
     }
   }
 
+  // 2. DELETE TRADE
   async function handleDeleteTrade(id) {
     if (!window.confirm('Are you sure you want to delete this trade?')) return
     try {
@@ -214,6 +230,138 @@ export default function App() {
       showToast('Trade deleted.')
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  // 3. OPEN CLOSE TRADE MODAL
+  function handleOpenCloseModal(trade) {
+    setClosingTrade(trade)
+    setCloseForm({
+      exit_price: trade.exit_price ? String(trade.exit_price) : '',
+      fees: String(trade.fees || 0),
+      emotion: trade.emotion || 'Disciplined',
+      notes: trade.notes ? `${trade.notes} [Closed position]` : ''
+    })
+  }
+
+  // 4. CONFIRM CLOSE TRADE
+  async function handleConfirmCloseTrade(e) {
+    e.preventDefault()
+    if (!closingTrade) return
+    if (!closeForm.exit_price) {
+      alert('Please enter the exit/close price.')
+      return
+    }
+
+    setBusy(true)
+    try {
+      const exitPriceNum = Number(closeForm.exit_price)
+      const entryPriceNum = Number(closingTrade.entry_price)
+      const qty = Number(closingTrade.quantity)
+      const feeNum = Number(closeForm.fees || 0)
+
+      let gross = closingTrade.direction === 'LONG'
+        ? (exitPriceNum - entryPriceNum) * qty
+        : (entryPriceNum - exitPriceNum) * qty
+      gross = Number(gross.toFixed(2))
+      const net = Number((gross - feeNum).toFixed(2))
+
+      await api(`/trades/${closingTrade.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          status: 'CLOSED',
+          exit_price: exitPriceNum,
+          fees: feeNum,
+          gross_pnl: gross,
+          net_pnl: net,
+          emotion: closeForm.emotion,
+          notes: closeForm.notes,
+          closed_at: new Date().toISOString()
+        })
+      })
+
+      setClosingTrade(null)
+      await loadData()
+      showToast(`Position closed! Realized P&L: ${formatMoney(net)} ${net >= 0 ? '🎯' : '⚠️'}`)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // 5. OPEN EDIT TRADE MODAL
+  function handleOpenEditModal(trade) {
+    setEditingTrade({
+      ...trade,
+      entry_price: String(trade.entry_price ?? ''),
+      exit_price: trade.exit_price !== null && trade.exit_price !== undefined ? String(trade.exit_price) : '',
+      quantity: String(trade.quantity ?? ''),
+      fees: String(trade.fees ?? '0'),
+      other_costs: String(trade.other_costs ?? '0'),
+      gross_pnl: trade.gross_pnl !== null && trade.gross_pnl !== undefined ? String(trade.gross_pnl) : '',
+      notes: trade.notes || '',
+      strategy: trade.strategy || '',
+      tags: trade.tags || '',
+      exchange: trade.exchange || ''
+    })
+  }
+
+  // 6. CONFIRM EDIT TRADE
+  async function handleConfirmEditTrade(e) {
+    e.preventDefault()
+    if (!editingTrade) return
+
+    setBusy(true)
+    try {
+      const isClosed = editingTrade.status === 'CLOSED'
+      const entry = Number(editingTrade.entry_price)
+      const exit = isClosed && editingTrade.exit_price !== '' ? Number(editingTrade.exit_price) : null
+      const qty = Number(editingTrade.quantity)
+      const fees = Number(editingTrade.fees || 0)
+      const other = Number(editingTrade.other_costs || 0)
+
+      let gross = null
+      let net = null
+      if (isClosed && exit !== null) {
+        gross = editingTrade.market === 'FOREX' && editingTrade.gross_pnl !== ''
+          ? Number(editingTrade.gross_pnl)
+          : editingTrade.direction === 'LONG' ? (exit - entry) * qty : (entry - exit) * qty
+        gross = Number(gross.toFixed(2))
+        net = Number((gross - fees - other).toFixed(2))
+      }
+
+      const payload = {
+        market: editingTrade.market,
+        symbol: editingTrade.symbol.toUpperCase(),
+        direction: editingTrade.direction,
+        status: isClosed ? 'CLOSED' : 'OPEN',
+        entry_price: entry,
+        exit_price: exit,
+        quantity: qty,
+        fees,
+        other_costs: other,
+        gross_pnl: gross,
+        net_pnl: net,
+        strategy: editingTrade.strategy,
+        emotion: editingTrade.emotion,
+        tags: editingTrade.tags,
+        notes: editingTrade.notes,
+        exchange: editingTrade.exchange
+      }
+
+      await api(`/trades/${editingTrade.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      })
+
+      setEditingTrade(null)
+      await loadData()
+      showToast('Trade successfully updated!')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -287,6 +435,11 @@ export default function App() {
     })
   }, [trades, searchQuery, marketFilter, directionFilter, outcomeFilter])
 
+  // Open trades list
+  const openTrades = useMemo(() => {
+    return trades.filter(t => t.status === 'OPEN')
+  }, [trades])
+
   // Equity Curve calculation
   const equityData = useMemo(() => {
     const closed = [...trades]
@@ -325,7 +478,7 @@ export default function App() {
 
   // Live P&L Preview in Add Trade Form
   const previewPnl = useMemo(() => {
-    if (!form.entry_price || !form.exit_price || !form.quantity) return null
+    if (!form.entry_price || !form.exit_price || !form.quantity || form.status === 'OPEN') return null
     const entry = Number(form.entry_price)
     const exit = Number(form.exit_price)
     const qty = Number(form.quantity)
@@ -338,6 +491,20 @@ export default function App() {
       net: Number((gross - fees).toFixed(2))
     }
   }, [form])
+
+  // Live P&L Preview in Close Position Modal
+  const closePreviewPnl = useMemo(() => {
+    if (!closingTrade || !closeForm.exit_price) return null
+    const entry = Number(closingTrade.entry_price || 0)
+    const exit = Number(closeForm.exit_price)
+    const qty = Number(closingTrade.quantity || 0)
+    const fee = Number(closeForm.fees || 0)
+    let gross = closingTrade.direction === 'LONG' ? (exit - entry) * qty : (entry - exit) * qty
+    return {
+      gross: Number(gross.toFixed(2)),
+      net: Number((gross - fee).toFixed(2))
+    }
+  }, [closingTrade, closeForm])
 
   // Initial Avatar initials
   const userInitials = useMemo(() => {
@@ -402,17 +569,52 @@ export default function App() {
               </div>
               <div className="form-group">
                 <label>Password</label>
-                <input
-                  type="password"
-                  placeholder="Min 6 characters"
-                  value={auth.password}
-                  onChange={e => setAuth({ ...auth, password: e.target.value })}
-                  required
-                  minLength={6}
-                />
+                <div className="password-input-wrap">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Min 6 characters"
+                    value={auth.password}
+                    onChange={e => setAuth({ ...auth, password: e.target.value })}
+                    required
+                    minLength={6}
+                  />
+                  <button
+                    type="button"
+                    className="btn-toggle-eye"
+                    onClick={() => setShowPassword(!showPassword)}
+                    tabIndex="-1"
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
 
-              {error && <div className="error-box"><AlertCircle size={16} /> {error}</div>}
+              {error && (
+                <div className="error-box">
+                  <AlertCircle size={16} />
+                  <div className="error-text-wrap">
+                    <span>{error}</span>
+                    {error.includes('already exists') && (
+                      <button
+                        type="button"
+                        className="error-link-btn"
+                        onClick={() => { setAuthMode('login'); setError('') }}
+                      >
+                        Switch to Sign In &rarr;
+                      </button>
+                    )}
+                    {error.includes('No registered account') && (
+                      <button
+                        type="button"
+                        className="error-link-btn"
+                        onClick={() => { setAuthMode('register'); setError('') }}
+                      >
+                        Click here to Create Account &rarr;
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <button type="submit" className="btn-primary" disabled={busy}>
                 {busy ? 'Verifying...' : authMode === 'login' ? 'Sign In to Your Journal' : 'Create My Personal Journal'}
@@ -420,7 +622,7 @@ export default function App() {
             </form>
 
             <div className="auth-divider">
-              <span>OR TRY IT INSTANTLY</span>
+              <span>OR EXPLORE INSTANTLY</span>
             </div>
 
             <button
@@ -429,7 +631,7 @@ export default function App() {
               onClick={handleDemoAccess}
               disabled={busy}
             >
-              <Zap size={16} /> Explore Live Demo (Instant Access)
+              <Zap size={16} /> Explore Live Demo Mode
             </button>
 
             <p className="auth-footer-note">
@@ -476,7 +678,7 @@ export default function App() {
             onClick={() => setTab('history')}
           >
             <History size={18} />
-            <span>Trade History</span>
+            <span>Trade Journal</span>
             {trades.length > 0 && <span className="nav-badge">{trades.length}</span>}
           </button>
           <button
@@ -514,41 +716,45 @@ export default function App() {
       <main className="main-content">
         {/* TOP BAR */}
         <header className="topbar">
-          <div className="page-heading">
-            <span className="eyebrow">
-              {user?.isDemo ? 'PREVIEW DEMO WORKSPACE' : 'PERSONAL TRADING WORKSPACE'}
-            </span>
-            <h2>
-              {tab === 'dashboard' && 'Performance Dashboard'}
-              {tab === 'add' && 'Record New Trade'}
-              {tab === 'history' && 'Trade Journal & History'}
-              {tab === 'psychology' && 'Trader Psychology & Analytics'}
-            </h2>
-          </div>
-
-          <div className="topbar-actions">
-            {/* Currency Selector */}
-            <div className="currency-pill">
-              <span className="pill-label">Currency:</span>
-              {Object.keys(CURRENCY_CONFIG).map(cur => (
-                <button
-                  key={cur}
-                  className={currency === cur ? 'cur-btn active' : 'cur-btn'}
-                  onClick={() => setCurrency(cur)}
-                >
-                  {cur}
-                </button>
-              ))}
+          <div className="topbar-main-row">
+            <div className="page-heading">
+              <div className="mobile-brand-pill">
+                <Sparkles size={14} />
+                <span>TradeMind AI</span>
+                <span className="user-dot">·</span>
+                <span className="user-name-small">{user?.name || 'Trader'}</span>
+              </div>
+              <h2>
+                {tab === 'dashboard' && 'Performance Dashboard'}
+                {tab === 'add' && 'Record New Trade'}
+                {tab === 'history' && 'Trade Journal & History'}
+                {tab === 'psychology' && 'Trader Psychology & Analytics'}
+              </h2>
             </div>
 
-            <button className="btn-icon" onClick={() => loadData()} title="Refresh Data">
-              <RefreshCw size={16} />
-            </button>
+            <div className="topbar-actions">
+              {/* Currency Selector */}
+              <div className="currency-pill">
+                {Object.keys(CURRENCY_CONFIG).map(cur => (
+                  <button
+                    key={cur}
+                    className={currency === cur ? 'cur-btn active' : 'cur-btn'}
+                    onClick={() => setCurrency(cur)}
+                  >
+                    {cur}
+                  </button>
+                ))}
+              </div>
 
-            <button className="btn-logout-header" onClick={handleLogout} title="Sign Out">
-              <LogOut size={14} />
-              <span>Sign out</span>
-            </button>
+              <button className="btn-icon" onClick={() => loadData()} title="Refresh Data">
+                <RefreshCw size={15} />
+              </button>
+
+              <button className="btn-logout-header" onClick={handleLogout} title="Sign Out">
+                <LogOut size={14} />
+                <span>Sign out</span>
+              </button>
+            </div>
           </div>
         </header>
 
@@ -584,7 +790,7 @@ export default function App() {
                     {formatMoney(stats.net_pnl)}
                   </h3>
                   <small className="stat-sub">
-                    Gross Profit: {formatMoney(stats.gross_profit)}
+                    {stats.winning_trades} Wins · {stats.losing_trades} Losses · {stats.open_trades} Open
                   </small>
                 </div>
               </div>
@@ -597,7 +803,7 @@ export default function App() {
                   <span className="stat-label">Win Rate</span>
                   <h3 className="stat-value">{stats.win_rate}%</h3>
                   <small className="stat-sub">
-                    {stats.winning_trades} Wins / {stats.losing_trades} Losses
+                    Closed Trades: {stats.total_trades}
                   </small>
                 </div>
               </div>
@@ -631,6 +837,79 @@ export default function App() {
               </div>
             </section>
 
+            {/* OPEN / RUNNING TRADES BANNER IF ANY ACTIVE POSITIONS */}
+            {openTrades.length > 0 && (
+              <section className="glass-panel active-positions-panel">
+                <div className="panel-header">
+                  <div className="live-indicator-wrap">
+                    <span className="pulse-indicator"></span>
+                    <div>
+                      <h3>Active Running Positions ({openTrades.length})</h3>
+                      <p className="panel-desc">Currently open trades. Click Close Position when your trade exits.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="active-trades-cards">
+                  {openTrades.map(trade => (
+                    <div key={trade.id} className="active-trade-card">
+                      <div className="active-trade-head">
+                        <div className="symbol-side">
+                          <span className="trade-symbol">{trade.symbol}</span>
+                          <span className={`direction-tag ${trade.direction === 'LONG' ? 'long' : 'short'}`}>
+                            {trade.direction}
+                          </span>
+                        </div>
+                        <span className="status-open-pill">RUNNING</span>
+                      </div>
+
+                      <div className="active-trade-body">
+                        <div className="trade-param">
+                          <span>Entry Price</span>
+                          <b>{trade.entry_price}</b>
+                        </div>
+                        <div className="trade-param">
+                          <span>Quantity</span>
+                          <b>{trade.quantity}</b>
+                        </div>
+                        <div className="trade-param">
+                          <span>Market</span>
+                          <b>{trade.market}</b>
+                        </div>
+                        <div className="trade-param">
+                          <span>Strategy</span>
+                          <b>{trade.strategy || '—'}</b>
+                        </div>
+                      </div>
+
+                      <div className="active-trade-footer">
+                        <button
+                          className="btn-close-action"
+                          onClick={() => handleOpenCloseModal(trade)}
+                        >
+                          <Zap size={14} /> Close Position & Enter Exit Price
+                        </button>
+                        <button
+                          className="btn-edit-action"
+                          onClick={() => handleOpenEditModal(trade)}
+                          title="Edit trade details"
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                        <button
+                          className="btn-trash-action"
+                          onClick={() => handleDeleteTrade(trade.id)}
+                          title="Delete trade"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* INTERACTIVE EQUITY CURVE */}
             <section className="glass-panel">
               <div className="panel-header">
@@ -649,11 +928,11 @@ export default function App() {
                 {equityData.length === 0 ? (
                   <div className="empty-chart">
                     <Activity size={32} />
-                    <p>No closed trades recorded yet. Record trades to see your live equity curve.</p>
+                    <p>No closed trades recorded yet. Record or close trades to see your live equity curve.</p>
                     <button className="btn-primary-sm" onClick={() => setTab('add')}>+ Record First Trade</button>
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={320}>
+                  <ResponsiveContainer width="100%" height={280}>
                     <AreaChart data={equityData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
                       <defs>
                         <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
@@ -662,10 +941,10 @@ export default function App() {
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                      <XAxis dataKey="tradeIndex" stroke="#64748b" fontSize={12} tickLine={false} />
+                      <XAxis dataKey="tradeIndex" stroke="#64748b" fontSize={11} tickLine={false} />
                       <YAxis
                         stroke="#64748b"
-                        fontSize={12}
+                        fontSize={11}
                         tickLine={false}
                         tickFormatter={val => `${CURRENCY_CONFIG[currency]?.symbol || '₹'}${val}`}
                       />
@@ -708,7 +987,7 @@ export default function App() {
             <section className="glass-panel">
               <div className="panel-header">
                 <div>
-                  <h3>Recent Trades</h3>
+                  <h3>Recent Executions</h3>
                   <p className="panel-desc">Latest positions recorded in your journal</p>
                 </div>
                 <button className="btn-link" onClick={() => setTab('history')}>
@@ -716,9 +995,11 @@ export default function App() {
                 </button>
               </div>
 
-              <TradeTable
+              <TradeList
                 trades={trades.slice(0, 5)}
                 onDelete={handleDeleteTrade}
+                onCloseTrade={handleOpenCloseModal}
+                onEditTrade={handleOpenEditModal}
                 formatMoney={formatMoney}
               />
             </section>
@@ -807,8 +1088,8 @@ export default function App() {
                     value={form.status}
                     onChange={e => setForm({ ...form, status: e.target.value })}
                   >
-                    <option value="CLOSED">CLOSED (Completed Trade)</option>
-                    <option value="OPEN">OPEN (Currently Active Position)</option>
+                    <option value="CLOSED">CLOSED (Completed Trade - Enter Exit Price)</option>
+                    <option value="OPEN">OPEN / RUNNING (Active Position - Enter Exit Price Later)</option>
                   </select>
                 </div>
 
@@ -826,7 +1107,9 @@ export default function App() {
                 </div>
 
                 <div className="field">
-                  <label>Exit Price {form.status === 'OPEN' && '(Optional while Open)'}</label>
+                  <label>
+                    Exit Price {form.status === 'OPEN' ? '(Disabled while Open - enter when closing)' : '(Required for Closed)'}
+                  </label>
                   <input
                     type="number"
                     step="any"
@@ -834,7 +1117,7 @@ export default function App() {
                     onChange={e => setForm({ ...form, exit_price: e.target.value })}
                     disabled={form.status === 'OPEN'}
                     required={form.status === 'CLOSED'}
-                    placeholder="0.00"
+                    placeholder={form.status === 'OPEN' ? 'Will be entered when you close this trade' : '0.00'}
                   />
                 </div>
 
@@ -960,7 +1243,7 @@ export default function App() {
 
                 <div className="field full-width form-actions">
                   <button type="submit" className="btn-primary" disabled={busy}>
-                    {busy ? 'Saving...' : '💾 Save & Record Trade'}
+                    {busy ? 'Saving...' : form.status === 'OPEN' ? '🟢 Save as Open Running Position' : '💾 Save & Record Closed Trade'}
                   </button>
                 </div>
               </form>
@@ -1019,10 +1302,12 @@ export default function App() {
                 </div>
               </div>
 
-              {/* TABLE */}
-              <TradeTable
+              {/* TRADES LIST (RESPONSIVE TABLE ON DESKTOP, CARDS ON MOBILE) */}
+              <TradeList
                 trades={filteredTrades}
                 onDelete={handleDeleteTrade}
+                onCloseTrade={handleOpenCloseModal}
+                onEditTrade={handleOpenEditModal}
                 formatMoney={formatMoney}
               />
 
@@ -1047,7 +1332,6 @@ export default function App() {
         {/* TAB 4: AI PSYCHOLOGY & INSIGHTS */}
         {tab === 'psychology' && (
           <div className="tab-pane">
-            {/* PSYCHOLOGY OVERVIEW */}
             <section className="glass-panel">
               <div className="panel-header">
                 <div>
@@ -1145,11 +1429,286 @@ export default function App() {
           <span>Not Financial Advice · Built for Disciplined Traders</span>
         </footer>
       </main>
+
+      {/* MODAL 1: CLOSE RUNNING TRADE */}
+      {closingTrade && (
+        <div className="modal-backdrop" onClick={() => setClosingTrade(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-wrap">
+                <div className="modal-badge-row">
+                  <span className="modal-symbol">{closingTrade.symbol}</span>
+                  <span className={`direction-tag ${closingTrade.direction === 'LONG' ? 'long' : 'short'}`}>
+                    {closingTrade.direction}
+                  </span>
+                  <span className="status-open-pill">ACTIVE POSITION</span>
+                </div>
+                <h3>Close Position & Calculate P&L</h3>
+              </div>
+              <button className="modal-close-btn" onClick={() => setClosingTrade(null)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmCloseTrade} className="modal-form">
+              <div className="modal-summary-box">
+                <div className="modal-param">
+                  <span>Entry Price:</span>
+                  <b>{closingTrade.entry_price}</b>
+                </div>
+                <div className="modal-param">
+                  <span>Quantity:</span>
+                  <b>{closingTrade.quantity}</b>
+                </div>
+                <div className="modal-param">
+                  <span>Market:</span>
+                  <b>{closingTrade.market}</b>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>Exit / Close Price *</label>
+                <input
+                  type="number"
+                  step="any"
+                  required
+                  autoFocus
+                  placeholder="e.g. 76500"
+                  value={closeForm.exit_price}
+                  onChange={e => setCloseForm({ ...closeForm, exit_price: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Closing Trading Fees ({currency})</label>
+                <input
+                  type="number"
+                  step="any"
+                  placeholder="0.00"
+                  value={closeForm.fees}
+                  onChange={e => setCloseForm({ ...closeForm, fees: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Trader Emotion at Exit</label>
+                <select
+                  value={closeForm.emotion}
+                  onChange={e => setCloseForm({ ...closeForm, emotion: e.target.value })}
+                >
+                  <option value="Confident">🎯 Confident & Prepared</option>
+                  <option value="Disciplined">🧘 Disciplined (Followed Plan)</option>
+                  <option value="FOMO">⚡ FOMO</option>
+                  <option value="Anxious">😰 Anxious / Relieved</option>
+                  <option value="Revenge">😤 Revenge</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Closing Review Notes</label>
+                <textarea
+                  rows="2"
+                  placeholder="Why did you exit? Did you hit target or cut early?"
+                  value={closeForm.notes}
+                  onChange={e => setCloseForm({ ...closeForm, notes: e.target.value })}
+                />
+              </div>
+
+              {/* Dynamic P&L Preview */}
+              {closePreviewPnl && (
+                <div className="preview-box">
+                  <span className="preview-label">Estimated Realized P&L:</span>
+                  <div className="preview-values">
+                    <span>Gross: <b>{formatMoney(closePreviewPnl.gross)}</b></span>
+                    <span>Net: <b className={closePreviewPnl.net >= 0 ? 'green' : 'red'}>{formatMoney(closePreviewPnl.net)}</b></span>
+                  </div>
+                </div>
+              )}
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn-outline-sm"
+                  onClick={() => setClosingTrade(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={busy}
+                >
+                  {busy ? 'Closing...' : '✓ Confirm & Close Position'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: EDIT TRADE */}
+      {editingTrade && (
+        <div className="modal-backdrop" onClick={() => setEditingTrade(null)}>
+          <div className="modal-content large" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-wrap">
+                <h3>Edit Trade Execution</h3>
+                <p className="panel-desc">Update parameters, notes, or execution price</p>
+              </div>
+              <button className="modal-close-btn" onClick={() => setEditingTrade(null)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmEditTrade} className="modal-form">
+              <div className="form-row-2">
+                <div className="form-group">
+                  <label>Symbol / Pair</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingTrade.symbol}
+                    onChange={e => setEditingTrade({ ...editingTrade, symbol: e.target.value.toUpperCase() })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Market</label>
+                  <select
+                    value={editingTrade.market}
+                    onChange={e => setEditingTrade({ ...editingTrade, market: e.target.value })}
+                  >
+                    <option value="CRYPTO">Crypto</option>
+                    <option value="FOREX">Forex</option>
+                    <option value="STOCKS">Stocks</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-row-2">
+                <div className="form-group">
+                  <label>Direction</label>
+                  <select
+                    value={editingTrade.direction}
+                    onChange={e => setEditingTrade({ ...editingTrade, direction: e.target.value })}
+                  >
+                    <option value="LONG">BUY / LONG</option>
+                    <option value="SHORT">SELL / SHORT</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Status</label>
+                  <select
+                    value={editingTrade.status}
+                    onChange={e => setEditingTrade({ ...editingTrade, status: e.target.value })}
+                  >
+                    <option value="CLOSED">CLOSED</option>
+                    <option value="OPEN">OPEN / RUNNING</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-row-3">
+                <div className="form-group">
+                  <label>Entry Price</label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={editingTrade.entry_price}
+                    onChange={e => setEditingTrade({ ...editingTrade, entry_price: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Exit Price {editingTrade.status === 'OPEN' && '(Optional)'}</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={editingTrade.exit_price}
+                    onChange={e => setEditingTrade({ ...editingTrade, exit_price: e.target.value })}
+                    placeholder={editingTrade.status === 'OPEN' ? 'Open Position' : '0.00'}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Quantity</label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={editingTrade.quantity}
+                    onChange={e => setEditingTrade({ ...editingTrade, quantity: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="form-row-2">
+                <div className="form-group">
+                  <label>Trading Fees ({currency})</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={editingTrade.fees}
+                    onChange={e => setEditingTrade({ ...editingTrade, fees: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Emotion</label>
+                  <select
+                    value={editingTrade.emotion}
+                    onChange={e => setEditingTrade({ ...editingTrade, emotion: e.target.value })}
+                  >
+                    <option value="Confident">🎯 Confident</option>
+                    <option value="Disciplined">🧘 Disciplined</option>
+                    <option value="FOMO">⚡ FOMO</option>
+                    <option value="Revenge">😤 Revenge</option>
+                    <option value="Anxious">😰 Anxious</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>Strategy Setup</label>
+                <input
+                  type="text"
+                  value={editingTrade.strategy}
+                  onChange={e => setEditingTrade({ ...editingTrade, strategy: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Trade Notes</label>
+                <textarea
+                  rows="2"
+                  value={editingTrade.notes}
+                  onChange={e => setEditingTrade({ ...editingTrade, notes: e.target.value })}
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn-outline-sm"
+                  onClick={() => setEditingTrade(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={busy}
+                >
+                  {busy ? 'Saving...' : '💾 Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-function TradeTable({ trades, onDelete, formatMoney }) {
+// RESPONSIVE TRADES LIST COMPONENT (MODERN TABLE ON DESKTOP, COMPACT CARDS ON MOBILE)
+function TradeList({ trades, onDelete, onCloseTrade, onEditTrade, formatMoney }) {
   if (!trades.length) {
     return (
       <div className="empty-table">
@@ -1160,75 +1719,178 @@ function TradeTable({ trades, onDelete, formatMoney }) {
   }
 
   return (
-    <div className="table-responsive">
-      <table className="modern-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Symbol / Pair</th>
-            <th>Market</th>
-            <th>Direction</th>
-            <th>Emotion</th>
-            <th>Entry</th>
-            <th>Exit</th>
-            <th>Net P&L</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {trades.map(t => {
-            const isWin = Number(t.net_pnl) > 0
-            const isLoss = Number(t.net_pnl) < 0
-            const isOpen = t.status === 'OPEN'
-            const dateStr = t.closed_at
-              ? new Date(t.closed_at).toLocaleDateString()
-              : new Date(t.created_at).toLocaleDateString()
+    <div className="trade-list-container">
+      {/* 1. DESKTOP VIEW: FULL TABLE */}
+      <div className="desktop-table-wrap">
+        <table className="modern-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Symbol / Pair</th>
+              <th>Market</th>
+              <th>Side</th>
+              <th>Emotion</th>
+              <th>Entry</th>
+              <th>Exit</th>
+              <th>Net P&L</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {trades.map(t => {
+              const isWin = Number(t.net_pnl) > 0
+              const isLoss = Number(t.net_pnl) < 0
+              const isOpen = t.status === 'OPEN'
+              const dateStr = t.closed_at
+                ? new Date(t.closed_at).toLocaleDateString()
+                : new Date(t.created_at).toLocaleDateString()
 
-            return (
-              <tr key={t.id}>
-                <td className="cell-date">{dateStr}</td>
-                <td>
-                  <div className="cell-symbol">
-                    <b>{t.symbol}</b>
-                    <small>{t.exchange || t.strategy || '—'}</small>
-                  </div>
-                </td>
-                <td>
-                  <span className="market-tag">{t.market}</span>
-                </td>
-                <td>
+              return (
+                <tr key={t.id} className={isOpen ? 'row-open-trade' : ''}>
+                  <td className="cell-date">{dateStr}</td>
+                  <td>
+                    <div className="cell-symbol">
+                      <b>{t.symbol}</b>
+                      <small>{t.exchange || t.strategy || '—'}</small>
+                    </div>
+                  </td>
+                  <td>
+                    <span className="market-tag">{t.market}</span>
+                  </td>
+                  <td>
+                    <span className={`direction-tag ${t.direction === 'LONG' ? 'long' : 'short'}`}>
+                      {t.direction}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="emotion-pill">{t.emotion || '—'}</span>
+                  </td>
+                  <td className="cell-price">{t.entry_price}</td>
+                  <td className="cell-price">
+                    {isOpen ? <span className="open-dash">—</span> : t.exit_price ?? '—'}
+                  </td>
+                  <td>
+                    {isOpen ? (
+                      <span className="status-open-pill">OPEN</span>
+                    ) : (
+                      <b className={isWin ? 'pnl-val green' : isLoss ? 'pnl-val red' : 'pnl-val'}>
+                        {formatMoney(t.net_pnl)}
+                      </b>
+                    )}
+                  </td>
+                  <td className="cell-actions-row">
+                    {isOpen && (
+                      <button
+                        className="btn-quick-close"
+                        onClick={() => onCloseTrade(t)}
+                        title="Close Trade / Enter Exit Price"
+                      >
+                        <Zap size={12} /> Close
+                      </button>
+                    )}
+                    <button
+                      className="btn-action-icon"
+                      onClick={() => onEditTrade(t)}
+                      title="Edit trade details"
+                    >
+                      <Edit2 size={13} />
+                    </button>
+                    <button
+                      className="btn-trash"
+                      onClick={() => onDelete(t.id)}
+                      title="Delete trade"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* 2. MOBILE VIEW: COMPACT TRADE CARDS */}
+      <div className="mobile-trade-cards">
+        {trades.map(t => {
+          const isWin = Number(t.net_pnl) > 0
+          const isLoss = Number(t.net_pnl) < 0
+          const isOpen = t.status === 'OPEN'
+          const dateStr = t.closed_at
+            ? new Date(t.closed_at).toLocaleDateString()
+            : new Date(t.created_at).toLocaleDateString()
+
+          return (
+            <div key={t.id} className={`mobile-card ${isOpen ? 'card-open' : ''}`}>
+              <div className="mobile-card-top">
+                <div className="mobile-symbol-block">
+                  <span className="mobile-symbol">{t.symbol}</span>
                   <span className={`direction-tag ${t.direction === 'LONG' ? 'long' : 'short'}`}>
                     {t.direction}
                   </span>
-                </td>
-                <td>
-                  <span className="emotion-pill">{t.emotion || '—'}</span>
-                </td>
-                <td className="cell-price">{t.entry_price}</td>
-                <td className="cell-price">{t.exit_price ?? '—'}</td>
-                <td>
+                  <span className="mobile-market-tag">{t.market}</span>
+                </div>
+                <div className="mobile-pnl-block">
                   {isOpen ? (
-                    <span className="status-open-pill">OPEN</span>
+                    <span className="status-open-pill">RUNNING</span>
                   ) : (
-                    <b className={isWin ? 'pnl-val green' : isLoss ? 'pnl-val red' : 'pnl-val'}>
+                    <b className={isWin ? 'green' : isLoss ? 'red' : 'white'}>
                       {formatMoney(t.net_pnl)}
                     </b>
                   )}
-                </td>
-                <td className="cell-action">
+                </div>
+              </div>
+
+              <div className="mobile-card-details">
+                <div className="m-detail-col">
+                  <span className="m-lbl">Entry</span>
+                  <span className="m-val">{t.entry_price}</span>
+                </div>
+                <div className="m-detail-col">
+                  <span className="m-lbl">Exit</span>
+                  <span className="m-val">{isOpen ? '—' : t.exit_price ?? '—'}</span>
+                </div>
+                <div className="m-detail-col">
+                  <span className="m-lbl">Qty</span>
+                  <span className="m-val">{t.quantity}</span>
+                </div>
+                <div className="m-detail-col">
+                  <span className="m-lbl">Emotion</span>
+                  <span className="m-val emotion">{t.emotion || '—'}</span>
+                </div>
+              </div>
+
+              <div className="mobile-card-actions">
+                <span className="m-date">{dateStr}</span>
+                <div className="m-btn-group">
+                  {isOpen && (
+                    <button
+                      className="btn-quick-close"
+                      onClick={() => onCloseTrade(t)}
+                    >
+                      <Zap size={12} /> Close Position
+                    </button>
+                  )}
+                  <button
+                    className="btn-action-icon"
+                    onClick={() => onEditTrade(t)}
+                    title="Edit trade"
+                  >
+                    <Edit2 size={13} /> Edit
+                  </button>
                   <button
                     className="btn-trash"
                     onClick={() => onDelete(t.id)}
                     title="Delete trade"
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={13} />
                   </button>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
