@@ -486,6 +486,14 @@ export default function App() {
             <BrainCircuit size={18} />
             <span>AI Psychology</span>
           </button>
+          <button
+            className="mobile-signout-btn"
+            onClick={handleLogout}
+            title="Sign Out"
+          >
+            <LogOut size={18} />
+            <span>Sign out</span>
+          </button>
         </nav>
 
         <div className="sidebar-footer">
@@ -535,6 +543,11 @@ export default function App() {
 
             <button className="btn-icon" onClick={() => loadData()} title="Refresh Data">
               <RefreshCw size={16} />
+            </button>
+
+            <button className="btn-logout-header" onClick={handleLogout} title="Sign Out">
+              <LogOut size={14} />
+              <span>Sign out</span>
             </button>
           </div>
         </header>

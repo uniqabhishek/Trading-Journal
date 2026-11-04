@@ -493,17 +493,22 @@ export default function App() {
           </View>
         </View>
 
-        {/* Currency Switcher */}
-        <View style={styles.currencyToggle}>
-          {Object.keys(CURRENCIES).map(c => (
-            <TouchableOpacity
-              key={c}
-              style={[styles.curBtn, currency === c && styles.curBtnActive]}
-              onPress={() => setCurrency(c)}
-            >
-              <Text style={[styles.curBtnText, currency === c && styles.textWhite]}>{c}</Text>
-            </TouchableOpacity>
-          ))}
+        {/* Currency Switcher & Sign Out */}
+        <View style={styles.headerRight}>
+          <View style={styles.currencyToggle}>
+            {Object.keys(CURRENCIES).map(c => (
+              <TouchableOpacity
+                key={c}
+                style={[styles.curBtn, currency === c && styles.curBtnActive]}
+                onPress={() => setCurrency(c)}
+              >
+                <Text style={[styles.curBtnText, currency === c && styles.textWhite]}>{c}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TouchableOpacity style={styles.headerSignOutBtn} onPress={handleSignOut} title="Sign Out">
+            <Text style={styles.headerSignOutText}>Sign out</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -990,74 +995,84 @@ const styles = StyleSheet.create({
     borderBottomColor: '#1e293b',
     backgroundColor: '#0b1120'
   },
-  headerBrand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  headerLogo: { width: 34, height: 34, borderRadius: 8 },
-  headerTitle: { fontSize: 16, fontWeight: '800', color: '#fff' },
-  headerUser: { fontSize: 11, color: '#64748b' },
+  headerBrand: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerLogo: { width: 32, height: 32, borderRadius: 8 },
+  headerTitle: { fontSize: 15, fontWeight: '800', color: '#fff' },
+  headerUser: { fontSize: 10, color: '#64748b' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerSignOutBtn: {
+    backgroundColor: 'rgba(244, 63, 94, 0.12)',
+    borderColor: 'rgba(244, 63, 94, 0.35)',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 7
+  },
+  headerSignOutText: { color: '#f43f5e', fontSize: 11, fontWeight: '700' },
   currencyToggle: { flexDirection: 'row', backgroundColor: '#070b14', borderRadius: 8, padding: 2 },
-  curBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  curBtn: { paddingHorizontal: 7, paddingVertical: 4, borderRadius: 6 },
   curBtnActive: { backgroundColor: '#2563eb' },
-  curBtnText: { fontSize: 11, color: '#94a3b8', fontWeight: '700' },
+  curBtnText: { fontSize: 10, color: '#94a3b8', fontWeight: '700' },
 
   // SCROLL & PANES
-  mainScroll: { padding: 18, paddingBottom: 90 },
-  pane: { gap: 16 },
+  mainScroll: { padding: 14, paddingBottom: 80 },
+  pane: { gap: 12 },
 
   // HERO CARD
   heroCard: {
     backgroundColor: '#0f172a',
-    borderRadius: 18,
-    padding: 22,
+    borderRadius: 14,
+    padding: 16,
     borderWidth: 1,
     borderColor: '#1e293b'
   },
   heroCardGreen: { borderColor: 'rgba(16, 185, 129, 0.35)', backgroundColor: 'rgba(16, 185, 129, 0.04)' },
   heroCardRed: { borderColor: 'rgba(244, 63, 94, 0.35)', backgroundColor: 'rgba(244, 63, 94, 0.04)' },
-  heroLabel: { fontSize: 11, fontWeight: '700', color: '#64748b', letterSpacing: 1 },
-  heroValue: { fontSize: 32, fontWeight: '900', marginVertical: 6, letterSpacing: -0.5 },
-  heroSub: { fontSize: 12, color: '#94a3b8' },
+  heroLabel: { fontSize: 10, fontWeight: '700', color: '#64748b', letterSpacing: 1 },
+  heroValue: { fontSize: 26, fontWeight: '900', marginVertical: 4, letterSpacing: -0.5 },
+  heroSub: { fontSize: 11, color: '#94a3b8' },
 
   // STATS GRID
-  statsGrid: { flexDirection: 'row', gap: 10 },
+  statsGrid: { flexDirection: 'row', gap: 8 },
   statBox: {
     flex: 1,
     backgroundColor: '#0f172a',
     borderColor: '#1e293b',
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 10,
+    padding: 10,
     alignItems: 'center'
   },
-  statBoxLabel: { fontSize: 9, color: '#64748b', fontWeight: '700' },
-  statBoxVal: { fontSize: 17, fontWeight: '800', color: '#fff', marginTop: 4 },
+  statBoxLabel: { fontSize: 8, color: '#64748b', fontWeight: '700' },
+  statBoxVal: { fontSize: 15, fontWeight: '800', color: '#fff', marginTop: 3 },
 
   // QUICK ACTIONS
-  quickBar: { flexDirection: 'row', gap: 10 },
-  btnAction: { flex: 1, backgroundColor: '#2563eb', padding: 14, borderRadius: 12, alignItems: 'center' },
-  btnActionText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  quickBar: { flexDirection: 'row', gap: 8 },
+  btnAction: { flex: 1, backgroundColor: '#2563eb', padding: 11, borderRadius: 10, alignItems: 'center' },
+  btnActionText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   btnActionOutline: {
     flex: 1,
     backgroundColor: '#0f172a',
     borderColor: '#1e293b',
     borderWidth: 1,
-    padding: 14,
-    borderRadius: 12,
+    padding: 11,
+    borderRadius: 10,
     alignItems: 'center'
   },
-  btnActionOutlineText: { color: '#94a3b8', fontWeight: '700', fontSize: 13 },
+  btnActionOutlineText: { color: '#94a3b8', fontWeight: '700', fontSize: 12 },
 
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
-  sectionTitle: { fontSize: 16, fontWeight: '800', color: '#fff' },
-  linkText: { fontSize: 12, color: '#38bdf8', fontWeight: '600' },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: '#fff' },
+  linkText: { fontSize: 11, color: '#38bdf8', fontWeight: '600' },
 
   // TRADE CARD
   tradeCard: {
     backgroundColor: '#0f172a',
     borderColor: '#1e293b',
     borderWidth: 1,
-    borderRadius: 14,
-    padding: 16,
-    gap: 8
+    borderRadius: 12,
+    padding: 12,
+    gap: 6
   },
   tradeHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   tradeSymbolWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },

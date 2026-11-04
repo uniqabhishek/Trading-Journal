@@ -301,6 +301,30 @@ button, input, select, textarea {
   color: #fff;
 }
 
+.btn-logout-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(244, 63, 94, 0.12);
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  color: var(--red);
+  padding: 8px 14px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-logout-header:hover {
+  background: rgba(244, 63, 94, 0.25);
+  border-color: var(--red);
+}
+
+.mobile-signout-btn {
+  display: none;
+}
+
 /* FLOATING TOAST */
 .floating-toast {
   position: fixed;
@@ -1207,44 +1231,91 @@ button, input, select, textarea {
   .sidebar {
     position: static;
     width: 100%;
-    padding: 14px 16px;
+    padding: 12px 14px;
     border-right: 0;
     border-bottom: 1px solid var(--border);
   }
   .main-content {
     margin-left: 0;
     width: 100%;
-    padding: 18px 14px;
+    padding: 14px 12px;
+  }
+  .topbar {
+    margin-bottom: 16px;
+    gap: 8px;
+  }
+  .page-heading h2 {
+    font-size: 20px;
   }
   .nav-menu {
     flex-direction: row;
     overflow-x: auto;
     padding-bottom: 4px;
+    gap: 6px;
   }
   .nav-menu button {
     white-space: nowrap;
-    font-size: 12px;
-    padding: 8px 12px;
+    font-size: 11px;
+    padding: 7px 10px;
+  }
+  .mobile-signout-btn {
+    display: flex;
+    color: var(--red) !important;
+    background: rgba(244, 63, 94, 0.1) !important;
+    border-color: rgba(244, 63, 94, 0.3) !important;
   }
   .stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .stat-card {
+    padding: 12px;
+    gap: 10px;
+    border-radius: 12px;
+  }
+  .stat-icon-wrapper {
+    width: 36px;
+    height: 36px;
+  }
+  .stat-label {
+    font-size: 10px;
+  }
+  .stat-value {
+    font-size: 18px;
+    margin: 4px 0 2px;
+  }
+  .stat-sub {
+    font-size: 10px;
+  }
+  .glass-panel {
+    padding: 16px;
+    border-radius: 14px;
+  }
+  .chart-container {
+    min-height: 240px;
   }
   .history-toolbar {
     flex-direction: column;
     align-items: stretch;
+    gap: 8px;
   }
   .filter-group {
     width: 100%;
+    gap: 6px;
   }
   .filter-group select {
     flex: 1;
+    font-size: 11px;
+    padding: 7px;
   }
   .action-buttons {
     margin-left: 0;
     width: 100%;
+    gap: 6px;
   }
   .action-buttons button {
     flex: 1;
+    padding: 7px;
   }
   .sidebar-footer {
     display: none;
