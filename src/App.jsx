@@ -525,6 +525,9 @@ export default function App() {
               </div>
               <h1>TradeMind <span>AI</span></h1>
               <p className="auth-subtitle">Professional Trading Performance & Psychology Journal</p>
+              <div className="auth-dev-badge">
+                <span>Architected & Developed by <b>Abhishek</b></span>
+              </div>
             </div>
 
             <div className="auth-tabs">
@@ -705,6 +708,10 @@ export default function App() {
               <strong>{user?.name || 'Trader'}</strong>
               <small>{user?.isDemo ? '⚡ Demo Account' : '🔒 Personal Account'}</small>
             </div>
+          </div>
+          <div className="sidebar-dev-tag">
+            <div className="dev-dot-pulse"></div>
+            <span>Dev: <b>Abhishek</b></span>
           </div>
           <button className="btn-logout" onClick={handleLogout} title="Sign Out">
             <LogOut size={16} /> Sign out
@@ -1421,12 +1428,39 @@ export default function App() {
                 </div>
               </div>
             </section>
+            {/* DEVELOPER PROFILE SECTION (HONORING ABHISHEK) */}
+            <section className="glass-panel dev-showcase-panel">
+              <div className="dev-showcase-content">
+                <div className="dev-avatar-box">
+                  <span>AS</span>
+                </div>
+                <div className="dev-text-details">
+                  <div className="dev-pill-row">
+                    <span className="badge-creator">LEAD ARCHITECT & CREATOR</span>
+                    <span className="badge-ver">v2.0.0 PRO</span>
+                    <span className="badge-channel">LIVE CI/CD UPDATES ACTIVE</span>
+                  </div>
+                  <h3>Abhishek</h3>
+                  <p className="dev-bio">
+                    Full-Stack Systems Architect & Quantitative Algorithmic Developer. Designed TradeMind AI for seamless execution tracking, risk-to-reward analytics, and eliminating trading psychology leaks.
+                  </p>
+                  <div className="dev-actions-row">
+                    <a href="https://github.com/uniqabhishek" target="_blank" rel="noreferrer" className="btn-outline-sm">
+                      GitHub Profile ↗
+                    </a>
+                    <a href="https://github.com/uniqabhishek/Trading-Journal" target="_blank" rel="noreferrer" className="btn-outline-sm">
+                      Source Repository ↗
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </section>
           </div>
         )}
 
         <footer className="footer-credits">
-          <span>TradeMind AI Terminal · Live Production Journal</span>
-          <span>Not Financial Advice · Built for Disciplined Traders</span>
+          <span>TradeMind AI Terminal v2.0.0 · Architected by <b style={{ color: 'var(--cyan)' }}>Abhishek</b></span>
+          <span><a href="https://github.com/uniqabhishek" target="_blank" rel="noreferrer" className="dev-footer-link">github.com/uniqabhishek</a> · Built for Disciplined Traders</span>
         </footer>
       </main>
 

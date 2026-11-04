@@ -1343,6 +1343,137 @@ button, input, select, textarea {
   line-height: 1.5;
 }
 
+/* DEVELOPER SPOTLIGHT & SHOWCASE */
+.sidebar-dev-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.dev-dot-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+}
+
+.auth-dev-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: var(--cyan);
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  margin-top: 8px;
+}
+
+.dev-showcase-panel {
+  border-color: rgba(56, 189, 248, 0.35);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.05) 0%, rgba(13, 21, 39, 0.95) 100%);
+  margin-top: 10px;
+}
+
+.dev-showcase-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.dev-avatar-box {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #2563eb, #38bdf8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 900;
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.35);
+  flex-shrink: 0;
+}
+
+.dev-text-details {
+  flex: 1;
+  min-width: 260px;
+}
+
+.dev-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.badge-creator {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--green);
+  background: rgba(16, 185, 129, 0.15);
+  padding: 2px 8px;
+  border-radius: 5px;
+  letter-spacing: 0.5px;
+}
+
+.badge-ver {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--cyan);
+  background: rgba(56, 189, 248, 0.15);
+  padding: 2px 8px;
+  border-radius: 5px;
+}
+
+.badge-channel {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--purple);
+  background: rgba(192, 132, 252, 0.12);
+  padding: 2px 8px;
+  border-radius: 5px;
+}
+
+.dev-text-details h3 {
+  font-size: 20px;
+  font-weight: 900;
+  color: #fff;
+  margin-bottom: 6px;
+}
+
+.dev-bio {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+
+.dev-actions-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dev-footer-link {
+  color: var(--cyan);
+  text-decoration: none;
+}
+
+.dev-footer-link:hover {
+  text-decoration: underline;
+}
+
 /* FOOTER CREDITS */
 .footer-credits {
   margin-top: 40px;

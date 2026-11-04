@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   SafeAreaView,
   View,
@@ -12,7 +12,10 @@ import {
   Dimensions,
   Platform,
   Modal,
-  StatusBar as RNStatusBar
+  StatusBar as RNStatusBar,
+  Animated,
+  Easing,
+  Linking
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -26,6 +29,12 @@ const CURRENCIES = {
   USD: { symbol: '$', locale: 'en-US' },
   EUR: { symbol: '€', locale: 'de-DE' }
 };
+
+const APP_VERSION = 'v2.0.0';
+const DEVELOPER_NAME = 'Abhishek';
+const GITHUB_REPO = 'https://github.com/uniqabhishek/Trading-Journal';
+const GITHUB_PROFILE = 'https://github.com/uniqabhishek';
+const WEB_APP_URL = 'https://uniqabhishek.github.io/Trading-Journal/';
 
 const DEMO_TRADES = [
   {
@@ -117,6 +126,19 @@ const EMOTIONS = [
 ];
 
 export default function App() {
+  // Opening Splash State & Animations
+  const [showSplash, setShowSplash] = useState(true);
+  const splashScale = useRef(new Animated.Value(0.7)).current;
+  const splashOpacity = useRef(new Animated.Value(0)).current;
+  const splashTextFade = useRef(new Animated.Value(0)).current;
+  const splashDevFade = useRef(new Animated.Value(0)).current;
+  const splashPulse = useRef(new Animated.Value(1)).current;
+  const splashContainerFade = useRef(new Animated.Value(1)).current;
+
+  // Main UI Tab Content Fade Animation
+  const tabFade = useRef(new Animated.Value(1)).current;
+
+  // Core App State
   const [session, setSession] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [authName, setAuthName] = useState('');
@@ -149,6 +171,83 @@ export default function App() {
   const [editingTrade, setEditingTrade] = useState(null);
   const [editForm, setEditForm] = useState(null);
 
+  // Developer Profile Modal
+  const [showDevModal, setShowDevModal] = useState(false);
+
+  // Run Splash Opening Animation on Start
+  useEffect(() => {
+    // 1. Logo spring and fade in
+    Animated.parallel([
+      Animated.spring(splashScale, {
+        toValue: 1,
+        friction: 6,
+        tension: 40,
+        useNativeDriver: true
+      }),
+      Animated.timing(splashOpacity, {
+        toValue: 1,
+        duration: 700,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true
+      })
+    ]).start(() => {
+      // 2. Title & Subtitle fade in
+      Animated.timing(splashTextFade, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true
+      }).start(() => {
+        // 3. Developer badge fade in
+        Animated.timing(splashDevFade, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true
+        }).start(() => {
+          // 4. Subtle continuous pulse
+          Animated.loop(
+            Animated.sequence([
+              Animated.timing(splashPulse, { toValue: 1.05, duration: 800, useNativeDriver: true }),
+              Animated.timing(splashPulse, { toValue: 1, duration: 800, useNativeDriver: true })
+            ])
+          ).start();
+
+          // 5. Automatically transition into main app after 2.3 seconds
+          setTimeout(() => {
+            handleDismissSplash();
+          }, 1400);
+        });
+      });
+    });
+  }, []);
+
+  function handleDismissSplash() {
+    Animated.timing(splashContainerFade, {
+      toValue: 0,
+      duration: 500,
+      easing: Easing.in(Easing.ease),
+      useNativeDriver: true
+    }).start(() => {
+      setShowSplash(false);
+    });
+  }
+
+  // Animate tab switching
+  function switchTab(newTab) {
+    if (newTab === tab) return;
+    Animated.timing(tabFade, {
+      toValue: 0,
+      duration: 120,
+      useNativeDriver: true
+    }).start(() => {
+      setTab(newTab);
+      Animated.timing(tabFade, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true
+      }).start();
+    });
+  }
+
   // Load active session on start
   useEffect(() => {
     (async () => {
@@ -159,7 +258,7 @@ export default function App() {
           setSession(s);
           loadUserTrades(s.userId);
         } else {
-          // Check v2 session migration
+          // Check legacy session
           const legacy = await AsyncStorage.getItem('tm_mobile_session');
           if (legacy) {
             const s = JSON.parse(legacy);
@@ -205,7 +304,7 @@ export default function App() {
     return `${num < 0 ? '-' : ''}${sym}${Math.abs(num).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
   }
 
-  // Auth: Register (Enforces unique email check)
+  // Auth: Register (Enforces unique email check & stable user ID)
   async function handleRegister() {
     if (!authName.trim()) return Alert.alert('Required', 'Please enter your full name.');
     if (!authEmail.trim() || !authEmail.includes('@')) return Alert.alert('Required', 'Please enter a valid email.');
@@ -344,7 +443,7 @@ export default function App() {
     setExitPrice('');
     setQuantity('');
     setNotes('');
-    setTab('dashboard');
+    switchTab('dashboard');
     Alert.alert('Trade Recorded', `${symbol} ${direction} (${status}) saved! 🚀`);
   }
 
@@ -385,7 +484,7 @@ export default function App() {
 
     await saveTradesToStorage(session.userId, updated);
     setClosingTrade(null);
-    Alert.alert('Position Closed', `Realized P&L: ${formatMoney(net)}!`);
+    Alert.alert('Position Closed', `Realized P&L: ${formatMoney(net)}! 🎯`);
   }
 
   // Edit Trade Action
@@ -462,6 +561,19 @@ export default function App() {
         }
       }
     ]);
+  }
+
+  // Check For Updates Action
+  async function handleCheckForUpdates() {
+    Alert.alert(
+      'TradeMind AI Update Channel',
+      `Current App Version: ${APP_VERSION}\nArchitect & Developer: ${DEVELOPER_NAME}\n\nYou are running the latest production build! When you push new code to GitHub, your app updates automatically.`,
+      [
+        { text: 'Open GitHub Repo', onPress: () => Linking.openURL(GITHUB_REPO) },
+        { text: 'Open Live Web Terminal', onPress: () => Linking.openURL(WEB_APP_URL) },
+        { text: 'Close', style: 'cancel' }
+      ]
+    );
   }
 
   // Dashboard Stats
@@ -542,7 +654,50 @@ export default function App() {
     }));
   }, [trades]);
 
-  // AUTH VIEW
+  // 1. APP OPENING ANIMATION & PICTURE SCREEN
+  if (showSplash) {
+    return (
+      <Animated.View style={[styles.splashScreenContainer, { opacity: splashContainerFade }]}>
+        <StatusBar style="light" />
+        <View style={styles.splashGlowBg} />
+
+        <Animated.View
+          style={[
+            styles.splashLogoWrapper,
+            {
+              transform: [{ scale: splashScale }, { scale: splashPulse }],
+              opacity: splashOpacity
+            }
+          ]}
+        >
+          <Image source={APP_LOGO} style={styles.splashLogoImage} resizeMode="contain" />
+          <View style={styles.splashCyberRing} />
+        </Animated.View>
+
+        <Animated.View style={[styles.splashTextWrap, { opacity: splashTextFade }]}>
+          <Text style={styles.splashTitle}>
+            TradeMind <Text style={styles.cyan}>AI</Text>
+          </Text>
+          <Text style={styles.splashSubtitle}>
+            Professional Trading Performance & Psychology Terminal
+          </Text>
+        </Animated.View>
+
+        <Animated.View style={[styles.splashDevPill, { opacity: splashDevFade }]}>
+          <View style={styles.splashPulseDot} />
+          <Text style={styles.splashDevText}>
+            Architected & Developed by <Text style={styles.splashDevName}>{DEVELOPER_NAME}</Text>
+          </Text>
+        </Animated.View>
+
+        <TouchableOpacity style={styles.splashSkipBtn} onPress={handleDismissSplash}>
+          <Text style={styles.splashSkipText}>Tap anywhere to enter →</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  }
+
+  // 2. AUTH VIEW
   if (!session) {
     return (
       <SafeAreaView style={styles.authSafe}>
@@ -552,6 +707,9 @@ export default function App() {
             <Image source={APP_LOGO} style={styles.appLogo} resizeMode="contain" />
             <Text style={styles.appTitle}>TradeMind <Text style={styles.cyan}>AI</Text></Text>
             <Text style={styles.appSubtitle}>Professional Trading Performance & Psychology</Text>
+            <View style={styles.devTagSmall}>
+              <Text style={styles.devTagText}>👨‍💻 Developed by {DEVELOPER_NAME}</Text>
+            </View>
           </View>
 
           <View style={styles.authCard}>
@@ -619,35 +777,44 @@ export default function App() {
 
             <View style={styles.dividerRow}>
               <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR TEST INSTANTLY</Text>
+              <Text style={styles.dividerText}>OR EXPLORE INSTANTLY</Text>
               <View style={styles.dividerLine} />
             </View>
 
             <TouchableOpacity style={styles.btnDemo} onPress={handleDemo}>
               <Text style={styles.btnDemoText}>⚡ Explore Live Demo Mode</Text>
             </TouchableOpacity>
+
+            <Text style={styles.authFooterCredits}>
+              TradeMind AI {APP_VERSION} · Created by {DEVELOPER_NAME}
+            </Text>
           </View>
         </ScrollView>
       </SafeAreaView>
     );
   }
 
-  // MAIN APP VIEW
+  // 3. MAIN APP VIEW
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="light" />
 
       {/* HEADER (Protected with Android status bar padding) */}
       <View style={styles.header}>
-        <View style={styles.headerBrand}>
+        <TouchableOpacity style={styles.headerBrand} onPress={() => setShowDevModal(true)}>
           <Image source={APP_LOGO} style={styles.headerLogo} />
           <View>
-            <Text style={styles.headerTitle}>TradeMind <Text style={styles.cyan}>AI</Text></Text>
+            <View style={styles.headerTitleRow}>
+              <Text style={styles.headerTitle}>TradeMind <Text style={styles.cyan}>AI</Text></Text>
+              <View style={styles.devBadgeTiny}>
+                <Text style={styles.devBadgeTinyText}>{DEVELOPER_NAME}</Text>
+              </View>
+            </View>
             <Text style={styles.headerUser}>
               {session.name} · {session.isDemo ? '⚡ Demo' : '🔒 Private'}
             </Text>
           </View>
-        </View>
+        </TouchableOpacity>
 
         {/* Currency Switcher & Sign Out */}
         <View style={styles.headerRight}>
@@ -668,14 +835,24 @@ export default function App() {
         </View>
       </View>
 
-      {/* CONTENT TABS */}
-      <ScrollView contentContainerStyle={styles.mainScroll} keyboardShouldPersistTaps="handled">
+      {/* CONTENT TABS WITH FADE-IN ANIMATION */}
+      <Animated.ScrollView
+        contentContainerStyle={styles.mainScroll}
+        keyboardShouldPersistTaps="handled"
+        style={{ opacity: tabFade }}
+      >
         {/* TAB 1: DASHBOARD */}
         {tab === 'dashboard' && (
           <View style={styles.pane}>
             {/* HERO P&L CARD */}
             <View style={[styles.heroCard, stats.netPnl >= 0 ? styles.heroCardGreen : styles.heroCardRed]}>
-              <Text style={styles.heroLabel}>NET REALIZED P&L</Text>
+              <View style={styles.heroHeadRow}>
+                <Text style={styles.heroLabel}>NET REALIZED P&L</Text>
+                <View style={styles.liveIndicatorRow}>
+                  <View style={styles.liveDot} />
+                  <Text style={styles.liveText}>LIVE METRICS</Text>
+                </View>
+              </View>
               <Text style={[styles.heroValue, stats.netPnl >= 0 ? styles.green : styles.red]}>
                 {formatMoney(stats.netPnl)}
               </Text>
@@ -702,18 +879,30 @@ export default function App() {
 
             {/* QUICK ACTIONS */}
             <View style={styles.quickBar}>
-              <TouchableOpacity style={styles.btnAction} onPress={() => setTab('add')}>
+              <TouchableOpacity style={styles.btnAction} onPress={() => switchTab('add')}>
                 <Text style={styles.btnActionText}>➕ Log New Trade</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.btnActionOutline} onPress={() => setTab('journal')}>
+              <TouchableOpacity style={styles.btnActionOutline} onPress={() => switchTab('journal')}>
                 <Text style={styles.btnActionOutlineText}>📜 View Journal</Text>
               </TouchableOpacity>
             </View>
 
+            {/* DEVELOPER SPOTLIGHT BAR (Quick Access to Abhishek's details) */}
+            <TouchableOpacity style={styles.devBarQuick} onPress={() => setShowDevModal(true)}>
+              <View style={styles.devBarLeft}>
+                <Text style={styles.devBarEmoji}>👨‍💻</Text>
+                <View>
+                  <Text style={styles.devBarTitle}>Architected by {DEVELOPER_NAME}</Text>
+                  <Text style={styles.devBarSub}>Version {APP_VERSION} · Tap to view developer details & updates</Text>
+                </View>
+              </View>
+              <Text style={styles.devBarArrow}>→</Text>
+            </TouchableOpacity>
+
             {/* RECENT TRADES */}
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Recent Executions</Text>
-              <TouchableOpacity onPress={() => setTab('journal')}>
+              <TouchableOpacity onPress={() => switchTab('journal')}>
                 <Text style={styles.linkText}>See all ({trades.length})</Text>
               </TouchableOpacity>
             </View>
@@ -937,7 +1126,7 @@ export default function App() {
             {filteredTrades.length === 0 ? (
               <View style={styles.emptyBox}>
                 <Text style={styles.emptyText}>No trades found.</Text>
-                <TouchableOpacity style={styles.btnPrimarySm} onPress={() => setTab('add')}>
+                <TouchableOpacity style={styles.btnPrimarySm} onPress={() => switchTab('add')}>
                   <Text style={styles.textWhite}>+ Add New Trade</Text>
                 </TouchableOpacity>
               </View>
@@ -956,9 +1145,54 @@ export default function App() {
           </View>
         )}
 
-        {/* TAB 4: PSYCHOLOGY & SETTINGS */}
+        {/* TAB 4: PSYCHOLOGY, PROFILE & DEVELOPER DETAILS */}
         {tab === 'psychology' && (
           <View style={styles.pane}>
+            {/* DEVELOPER PROFILE CARD (HONORING ABHISHEK) */}
+            <View style={styles.devCardFull}>
+              <View style={styles.devCardHead}>
+                <View style={styles.devAvatar}>
+                  <Text style={styles.devAvatarText}>AS</Text>
+                </View>
+                <View style={styles.devHeadInfo}>
+                  <View style={styles.devBadgeRow}>
+                    <Text style={styles.devLeadBadge}>LEAD CREATOR</Text>
+                    <Text style={styles.devVerBadge}>{APP_VERSION}</Text>
+                  </View>
+                  <Text style={styles.devName}>{DEVELOPER_NAME}</Text>
+                  <Text style={styles.devRole}>Systems Architect & Quant Developer</Text>
+                </View>
+              </View>
+
+              <Text style={styles.devBio}>
+                TradeMind AI is designed to eliminate emotional trading leaks, build discipline, and give independent traders institutional-grade execution journaling.
+              </Text>
+
+              <View style={styles.devLinksGrid}>
+                <TouchableOpacity
+                  style={styles.devActionBtn}
+                  onPress={() => Linking.openURL(GITHUB_PROFILE)}
+                >
+                  <Text style={styles.devActionBtnText}>GitHub Profile ↗</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.devActionBtn}
+                  onPress={() => Linking.openURL(GITHUB_REPO)}
+                >
+                  <Text style={styles.devActionBtnText}>Source Repo ↗</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={styles.btnCheckUpdates}
+                onPress={handleCheckForUpdates}
+              >
+                <Text style={styles.btnCheckUpdatesText}>🔄 Check for Updates / Sync</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* TRADING PSYCHOLOGY MATRIX */}
             <View style={styles.card}>
               <Text style={styles.cardHeading}>🧠 Trading Psychology Matrix</Text>
               <Text style={styles.cardSub}>How your mental state impacts your win rate</Text>
@@ -989,10 +1223,10 @@ export default function App() {
 
             {/* ACCOUNT MANAGEMENT */}
             <View style={styles.card}>
-              <Text style={styles.cardHeading}>Profile & Storage</Text>
+              <Text style={styles.cardHeading}>Account & Storage</Text>
               <Text style={styles.infoRow}>User: <Text style={styles.textWhite}>{session.name}</Text></Text>
               <Text style={styles.infoRow}>Email: <Text style={styles.textWhite}>{session.email}</Text></Text>
-              <Text style={styles.infoRow}>Storage: <Text style={styles.cyan}>Encrypted Isolated Storage</Text></Text>
+              <Text style={styles.infoRow}>Engine: <Text style={styles.cyan}>Offline Encrypted SQLite/AsyncStore</Text></Text>
 
               <TouchableOpacity style={styles.btnDangerOutline} onPress={handleSignOut}>
                 <Text style={styles.btnDangerText}>Sign Out</Text>
@@ -1000,7 +1234,7 @@ export default function App() {
             </View>
           </View>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* MODAL 1: CLOSE OPEN POSITION */}
       {closingTrade && (
@@ -1146,11 +1380,79 @@ export default function App() {
         </Modal>
       )}
 
+      {/* MODAL 3: DEVELOPER PROFILE MODAL (ABOUT ABHISHEK) */}
+      {showDevModal && (
+        <Modal transparent animationType="fade" visible={showDevModal} onRequestClose={() => setShowDevModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalBox}>
+              <View style={styles.modalHead}>
+                <Text style={styles.modalTitle}>👨‍💻 Developer & Creator</Text>
+                <TouchableOpacity onPress={() => setShowDevModal(false)}>
+                  <Text style={styles.modalCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.devModalProfileHead}>
+                <View style={styles.devAvatarLarge}>
+                  <Text style={styles.devAvatarLargeText}>AS</Text>
+                </View>
+                <View>
+                  <Text style={styles.devModalName}>{DEVELOPER_NAME}</Text>
+                  <Text style={styles.devModalRole}>Creator of TradeMind AI Terminal</Text>
+                  <Text style={styles.devModalBadge}>Official Release {APP_VERSION}</Text>
+                </View>
+              </View>
+
+              <Text style={styles.devModalDescription}>
+                Built with precision algorithms to empower traders with objective execution logging, risk-reward metrics, and emotional state analysis.
+              </Text>
+
+              <View style={styles.devModalStatsRow}>
+                <View style={styles.devStatItem}>
+                  <Text style={styles.devStatVal}>Offline</Text>
+                  <Text style={styles.devStatLbl}>Architecture</Text>
+                </View>
+                <View style={styles.devStatItem}>
+                  <Text style={styles.devStatVal}>21 MB</Text>
+                  <Text style={styles.devStatLbl}>Optimized APK</Text>
+                </View>
+                <View style={styles.devStatItem}>
+                  <Text style={styles.devStatVal}>CI/CD</Text>
+                  <Text style={styles.devStatLbl}>Push Updates</Text>
+                </View>
+              </View>
+
+              <View style={styles.modalBtnRow}>
+                <TouchableOpacity
+                  style={styles.modalBtnCancel}
+                  onPress={() => {
+                    setShowDevModal(false);
+                    Linking.openURL(GITHUB_PROFILE);
+                  }}
+                >
+                  <Text style={styles.modalBtnCancelText}>GitHub Profile</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.modalBtnConfirm}
+                  onPress={() => {
+                    setShowDevModal(false);
+                    handleCheckForUpdates();
+                  }}
+                >
+                  <Text style={styles.textWhite}>Check Updates</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+
       {/* BOTTOM TAB NAVIGATION */}
       <View style={styles.bottomNav}>
         <TouchableOpacity
           style={[styles.navBtn, tab === 'dashboard' && styles.navBtnActive]}
-          onPress={() => setTab('dashboard')}
+          onPress={() => switchTab('dashboard')}
         >
           <Text style={styles.navIcon}>📊</Text>
           <Text style={[styles.navLabel, tab === 'dashboard' && styles.cyan]}>Dashboard</Text>
@@ -1158,7 +1460,7 @@ export default function App() {
 
         <TouchableOpacity
           style={[styles.navBtn, tab === 'add' && styles.navBtnActive]}
-          onPress={() => setTab('add')}
+          onPress={() => switchTab('add')}
         >
           <Text style={styles.navIcon}>➕</Text>
           <Text style={[styles.navLabel, tab === 'add' && styles.cyan]}>Add Trade</Text>
@@ -1166,7 +1468,7 @@ export default function App() {
 
         <TouchableOpacity
           style={[styles.navBtn, tab === 'journal' && styles.navBtnActive]}
-          onPress={() => setTab('journal')}
+          onPress={() => switchTab('journal')}
         >
           <Text style={styles.navIcon}>📜</Text>
           <Text style={[styles.navLabel, tab === 'journal' && styles.cyan]}>Journal</Text>
@@ -1174,7 +1476,7 @@ export default function App() {
 
         <TouchableOpacity
           style={[styles.navBtn, tab === 'psychology' && styles.navBtnActive]}
-          onPress={() => setTab('psychology')}
+          onPress={() => switchTab('psychology')}
         >
           <Text style={styles.navIcon}>🧠</Text>
           <Text style={[styles.navLabel, tab === 'psychology' && styles.cyan]}>AI Mind</Text>
@@ -1250,14 +1552,24 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 0
   },
   authContainer: { padding: 24, justifyContent: 'center', minHeight: '100%' },
-  authLogoWrap: { alignItems: 'center', marginBottom: 24 },
-  appLogo: { width: 84, height: 84, borderRadius: 20, marginBottom: 12 },
+  authLogoWrap: { alignItems: 'center', marginBottom: 20 },
+  appLogo: { width: 84, height: 84, borderRadius: 20, marginBottom: 10 },
   appTitle: { fontSize: 28, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
   cyan: { color: '#38bdf8' },
   green: { color: '#10b981' },
   red: { color: '#f43f5e' },
   textWhite: { color: '#fff' },
   appSubtitle: { fontSize: 13, color: '#94a3b8', textAlign: 'center', marginTop: 4 },
+  devTagSmall: {
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginTop: 8
+  },
+  devTagText: { fontSize: 11, color: '#38bdf8', fontWeight: '700' },
   authCard: {
     backgroundColor: '#0f172a',
     borderColor: '#1e293b',
@@ -1306,6 +1618,103 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   btnDemoText: { color: '#38bdf8', fontSize: 13, fontWeight: '700' },
+  authFooterCredits: {
+    fontSize: 11,
+    color: '#64748b',
+    textAlign: 'center',
+    marginTop: 18
+  },
+
+  // OPENING SPLASH ANIMATION SCREEN
+  splashScreenContainer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#070b14',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+    padding: 24
+  },
+  splashGlowBg: {
+    position: 'absolute',
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+    filter: 'blur(40px)'
+  },
+  splashLogoWrapper: {
+    width: 130,
+    height: 130,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24
+  },
+  splashLogoImage: {
+    width: 110,
+    height: 110,
+    borderRadius: 26
+  },
+  splashCyberRing: {
+    position: 'absolute',
+    inset: -6,
+    borderRadius: 34,
+    borderWidth: 2,
+    borderColor: 'rgba(56, 189, 248, 0.4)',
+    borderStyle: 'dashed'
+  },
+  splashTextWrap: {
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 28
+  },
+  splashTitle: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: -0.5
+  },
+  splashSubtitle: {
+    fontSize: 13,
+    color: '#94a3b8',
+    textAlign: 'center',
+    maxWidth: 280,
+    lineHeight: 18
+  },
+  splashDevPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20
+  },
+  splashPulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10b981'
+  },
+  splashDevText: {
+    fontSize: 12,
+    color: '#94a3b8'
+  },
+  splashDevName: {
+    color: '#38bdf8',
+    fontWeight: '800'
+  },
+  splashSkipBtn: {
+    position: 'absolute',
+    bottom: 40,
+    padding: 10
+  },
+  splashSkipText: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '600'
+  },
 
   // HEADER
   header: {
@@ -1319,8 +1728,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#0b1120'
   },
   headerBrand: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerLogo: { width: 32, height: 32, borderRadius: 8 },
+  headerLogo: { width: 34, height: 34, borderRadius: 8 },
+  headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   headerTitle: { fontSize: 15, fontWeight: '800', color: '#fff' },
+  devBadgeTiny: {
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4
+  },
+  devBadgeTinyText: { fontSize: 9, color: '#38bdf8', fontWeight: '800' },
   headerUser: { fontSize: 10, color: '#64748b' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerSignOutBtn: {
@@ -1349,9 +1766,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1e293b'
   },
+  heroHeadRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   heroCardGreen: { borderColor: 'rgba(16, 185, 129, 0.35)', backgroundColor: 'rgba(16, 185, 129, 0.04)' },
   heroCardRed: { borderColor: 'rgba(244, 63, 94, 0.35)', backgroundColor: 'rgba(244, 63, 94, 0.04)' },
   heroLabel: { fontSize: 10, fontWeight: '700', color: '#64748b', letterSpacing: 1 },
+  liveIndicatorRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10b981' },
+  liveText: { fontSize: 9, color: '#10b981', fontWeight: '800' },
   heroValue: { fontSize: 26, fontWeight: '900', marginVertical: 4, letterSpacing: -0.5 },
   heroSub: { fontSize: 11, color: '#94a3b8' },
 
@@ -1383,6 +1804,23 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   btnActionOutlineText: { color: '#94a3b8', fontWeight: '700', fontSize: 12 },
+
+  // DEVELOPER SPOTLIGHT BAR
+  devBarQuick: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#0d1527',
+    borderColor: '#1e2e4f',
+    borderWidth: 1,
+    padding: 12,
+    borderRadius: 12
+  },
+  devBarLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  devBarEmoji: { fontSize: 20 },
+  devBarTitle: { fontSize: 12, fontWeight: '800', color: '#fff' },
+  devBarSub: { fontSize: 10, color: '#64748b' },
+  devBarArrow: { color: '#38bdf8', fontSize: 14, fontWeight: '700' },
 
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
   sectionTitle: { fontSize: 15, fontWeight: '800', color: '#fff' },
@@ -1495,6 +1933,71 @@ const styles = StyleSheet.create({
   progressFill: { height: '100%', borderRadius: 3 },
   emotionMeta: { fontSize: 10, color: '#64748b' },
 
+  // DEVELOPER PROFILE CARD
+  devCardFull: {
+    backgroundColor: '#0d1527',
+    borderColor: '#1e2e4f',
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 18,
+    gap: 12
+  },
+  devCardHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  devAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#2563eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#38bdf8'
+  },
+  devAvatarText: { color: '#fff', fontSize: 18, fontWeight: '900' },
+  devHeadInfo: { flex: 1 },
+  devBadgeRow: { flexDirection: 'row', gap: 6, marginBottom: 2 },
+  devLeadBadge: {
+    fontSize: 9,
+    color: '#10b981',
+    fontWeight: '800',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4
+  },
+  devVerBadge: {
+    fontSize: 9,
+    color: '#38bdf8',
+    fontWeight: '800',
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4
+  },
+  devName: { fontSize: 18, fontWeight: '900', color: '#fff' },
+  devRole: { fontSize: 11, color: '#94a3b8' },
+  devBio: { fontSize: 12, color: '#94a3b8', lineHeight: 18 },
+  devLinksGrid: { flexDirection: 'row', gap: 8 },
+  devActionBtn: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderColor: '#334155',
+    borderWidth: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center'
+  },
+  devActionBtnText: { color: '#38bdf8', fontSize: 11, fontWeight: '700' },
+  btnCheckUpdates: {
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    borderColor: 'rgba(56, 189, 248, 0.35)',
+    borderWidth: 1,
+    padding: 10,
+    borderRadius: 10,
+    alignItems: 'center'
+  },
+  btnCheckUpdatesText: { color: '#38bdf8', fontSize: 12, fontWeight: '700' },
+
   infoRow: { fontSize: 12, color: '#94a3b8' },
   btnDangerOutline: {
     borderColor: 'rgba(244, 63, 94, 0.4)',
@@ -1513,7 +2016,7 @@ const styles = StyleSheet.create({
   // MODALS
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     justifyContent: 'center',
     padding: 16
   },
@@ -1553,6 +2056,35 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: 'center'
   },
+
+  // DEVELOPER MODAL SPECIFIC
+  devModalProfileHead: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 6 },
+  devAvatarLarge: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#2563eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#38bdf8'
+  },
+  devAvatarLargeText: { color: '#fff', fontSize: 22, fontWeight: '900' },
+  devModalName: { fontSize: 20, fontWeight: '900', color: '#fff' },
+  devModalRole: { fontSize: 12, color: '#94a3b8' },
+  devModalBadge: { fontSize: 10, color: '#10b981', fontWeight: '700', marginTop: 2 },
+  devModalDescription: { fontSize: 12, color: '#94a3b8', lineHeight: 18 },
+  devModalStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: '#070b14',
+    padding: 10,
+    borderRadius: 10,
+    marginVertical: 4
+  },
+  devStatItem: { alignItems: 'center' },
+  devStatVal: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  devStatLbl: { color: '#64748b', fontSize: 9, textTransform: 'uppercase', marginTop: 2 },
 
   // BOTTOM NAVIGATION
   bottomNav: {

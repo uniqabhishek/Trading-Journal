@@ -1,7 +1,17 @@
 name: Build Android APK
 
 on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/build-apk.yml'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version tag (e.g. v2.0.0, v2.0.1)'
+        required: false
+        default: 'v2.0.0'
 
 permissions:
   contents: write
@@ -78,27 +88,35 @@ jobs:
           name: TradeMind-APK
           path: build-output/TradeMind.apk
 
+      - name: Determine Version Tag
+        id: vars
+        run: |
+          TAG="${{ github.event.inputs.version }}"
+          if [ -z "$TAG" ]; then
+            TAG="v2.0.0"
+          fi
+          echo "TAG_NAME=$TAG" >> $GITHUB_OUTPUT
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.2
-          name: TradeMind Android APK v1.0.2 (Production Release)
+          tag_name: ${{ steps.vars.outputs.TAG_NAME }}
+          name: TradeMind Android APK ${{ steps.vars.outputs.TAG_NAME }} (Production Release)
           body: |
-            ### 📱 TradeMind Production Release APK (v1.0.2)
-            Fully signed, standalone, and optimized Android APK.
+            ### 📱 TradeMind Production Release APK (${{ steps.vars.outputs.TAG_NAME }})
+            Official Android Release created & architected by **Abhishek**.
             
-            **Release Highlights:**
-            - **100% Standalone Offline**: Bundled `index.android.bundle` inside the APK (No Metro connection needed).
-            - **Play Store-Grade Signing**: Signed with official TradeMind release certificate (RSA 2048, 27-year validity).
-            - **Security & Integrity**: Zero security risks or unknown developer warnings.
-            - **Hermes Bytecode Engine**: Ultra-fast startup and smooth 60 FPS performance.
-            - **Compact Size**: Optimized single-architecture binary (~20-25 MB).
+            **✨ Release Highlights:**
+            - **Cinematic Opening Animation & Picture**: Glowing AI neural brain circuit with smooth spring entrance and developer signature.
+            - **Developer Profile Spotlight**: Dedicated section showcasing Abhishek (Lead Systems Architect & Quant Developer).
+            - **Fluid 60 FPS Micro-Interactions**: Smooth animated tab transitions, card press animations, and modal slide-ups.
+            - **Active Trade Management**: 1-tap Close Position & Edit Position with live P&L calculations.
+            - **100% Standalone Offline**: Bundled `index.android.bundle` directly inside the APK (Zero Metro dependency).
+            - **Play Store-Grade Security**: Signed with official TradeMind RSA 2048 certificate (27-year validity).
+            - **Ultra-Optimized Binary**: ~21 MB arm64-v8a single-architecture APK for fast download and instant execution.
             
-            **Installation:**
-            1. Download `TradeMind.apk` below directly to your Android device.
-            2. Tap to install.
-            3. Open TradeMind and start recording your trades!
+            **📲 Installation:**
+            1. Download `TradeMind.apk` below directly to your smartphone.
+            2. Tap to install and run!
           files: build-output/TradeMind.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
