@@ -10,7 +10,11 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "latest",
+    "expo-file-system": "^58.0.13",
     "expo-image-picker": "^58.0.10",
+    "expo-intent-launcher": "^58.0.3",
+    "expo-notifications": "^58.1.8",
+    "expo-sharing": "^58.0.22",
     "expo-status-bar": "latest",
     "react": "latest",
     "react-native": "latest"
