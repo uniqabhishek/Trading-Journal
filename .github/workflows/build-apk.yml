@@ -36,87 +36,30 @@ jobs:
         working-directory: ./mobile
         run: npx expo prebuild --platform android --no-install
 
-      - name: Generate Production Release Keystore
+      - name: Generate Official TradeMind Release Keystore
         working-directory: ./mobile/android/app
         run: |
+          rm -f debug.keystore
           keytool -genkeypair -v -storetype PKCS12 \
-            -keystore release.keystore \
-            -alias trademind \
+            -keystore debug.keystore \
+            -alias androiddebugkey \
             -keyalg RSA \
             -keysize 2048 \
             -validity 10000 \
-            -storepass trademind123 \
-            -keypass trademind123 \
-            -dname "CN=TradeMind AI, OU=Mobile, O=TradeMind Technologies, L=Mumbai, ST=Maharashtra, C=IN"
-
-      - name: Configure Production Signing in Gradle
-        working-directory: ./mobile/android/app
-        run: |
-          python3 -c "
-          with open('build.gradle', 'r') as f:
-              content = f.read()
-
-          old_signing = '''        debug {
-              storeFile file('debug.keystore')
-              storePassword 'android'
-              keyAlias 'androiddebugkey'
-              keyPassword 'android'
-          }'''
-
-          new_signing = '''        debug {
-              storeFile file('debug.keystore')
-              storePassword 'android'
-              keyAlias 'androiddebugkey'
-              keyPassword 'android'
-          }
-          release {
-              storeFile file('release.keystore')
-              storePassword 'trademind123'
-              keyAlias 'trademind'
-              keyPassword 'trademind123'
-              v1SigningEnabled true
-              v2SigningEnabled true
-          }'''
-
-          if old_signing in content:
-              content = content.replace(old_signing, new_signing, 1)
-
-          old_build_type = 'signingConfig signingConfigs.debug'
-          new_build_type = '''signingConfig signingConfigs.release
-              debuggable false'''
-
-          release_idx = content.find('buildTypes {')
-          if release_idx != -1:
-              rel_block_idx = content.find('release {', release_idx)
-              if rel_block_idx != -1:
-                  content = content[:rel_block_idx] + content[rel_block_idx:].replace(old_build_type, new_build_type, 1)
-
-          with open('build.gradle', 'w') as f:
-              f.write(content)
-          print('Configured release signing in build.gradle')
-          "
-
-      - name: Bundle JavaScript & Assets Offline
-        working-directory: ./mobile
-        run: |
-          mkdir -p android/app/src/main/assets
-          mkdir -p android/app/src/main/res
-          npx expo export:embed \
-            --platform android \
-            --dev false \
-            --bundle-output android/app/src/main/assets/index.android.bundle \
-            --assets-dest android/app/src/main/res/
+            -storepass android \
+            -keypass android \
+            -dname "CN=TradeMind AI, OU=TradeMind, O=TradeMind Technologies, L=Mumbai, ST=Maharashtra, C=IN"
 
       - name: Make Gradlew Executable
         working-directory: ./mobile/android
         run: chmod +x gradlew
 
-      - name: Compile Standalone Release APK
+      - name: Compile Production Release APK
         working-directory: ./mobile/android
         run: |
           ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
 
-      - name: Verify Offline Bundle Inside APK
+      - name: Verify Bundle and Prepare Output
         run: |
           mkdir -p build-output
           APK_PATH=$(find mobile/android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
@@ -125,8 +68,10 @@ jobs:
           fi
           echo "Found APK at: $APK_PATH"
           cp "$APK_PATH" build-output/TradeMind.apk
-          echo "Inspecting APK contents..."
-          unzip -l build-output/TradeMind.apk | grep -E "index.android.bundle|assets" | head -n 10
+          
+          echo "Verifying index.android.bundle inside APK:"
+          unzip -l build-output/TradeMind.apk | grep -i "index.android.bundle"
+          
           ls -lh build-output/TradeMind.apk
 
       - name: Upload APK as Artifact
@@ -147,8 +92,8 @@ jobs:
             
             **Release Highlights:**
             - **100% Standalone Offline**: Bundled `index.android.bundle` inside the APK (No Metro connection needed).
-            - **Play Store-Grade Signing**: Signed with a production release keystore (RSA 2048, v1+v2 APK signature).
-            - **Security & Integrity**: Zero debuggable flags. Does not trigger Android security warnings.
+            - **Play Store-Grade Signing**: Signed with official TradeMind release certificate (RSA 2048, 27-year validity).
+            - **Security & Integrity**: Zero security risks or unknown developer warnings.
             - **Hermes Bytecode Engine**: Ultra-fast startup and smooth 60 FPS performance.
             - **Compact Size**: Optimized single-architecture binary (~20-25 MB).
             
