@@ -44,7 +44,7 @@ const CURRENCIES = {
   EUR: { symbol: '€', locale: 'de-DE' }
 };
 
-const APP_VERSION = 'v2.3.0';
+const APP_VERSION = 'v2.3.1';
 const DEVELOPER_NAME = 'Abhishek';
 const GITHUB_REPO = 'https://github.com/uniqabhishek/Trading-Journal';
 const GITHUB_PROFILE = 'https://github.com/uniqabhishek';
@@ -462,7 +462,7 @@ export default function App() {
 
     const backHandlerSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => backHandlerSub.remove();
-  }, [updateModalVisible, updateStatus, viewingImage, closingTrade, editingTrade, showDevModal, otpStep, tab]);
+  }, [updateModalVisible, updateStatus, viewingImage, closingTrade, editingTrade, showDevModal, showForgotPassword, showBrokerModal, showAiModal, tab]);
 
   // 2. RUN SPLASH OPENING ANIMATION ON START
   useEffect(() => {
@@ -1228,6 +1228,7 @@ All P&L, fees, and stats have been recalculated automatically.`
     await AsyncStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(active));
     setSession(active);
     await loadUserTrades(existing.id);
+    await loadBrokers(existing.id);
     Alert.alert('Welcome Back', `Successfully logged in as ${existing.name}!`);
   }
 
@@ -1242,7 +1243,8 @@ All P&L, fees, and stats have been recalculated automatically.`
     };
     await AsyncStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(demoSession));
     setSession(demoSession);
-    loadUserTrades('demo');
+    await loadUserTrades('demo');
+    await loadBrokers('demo');
   }
 
   // 8. SIGN OUT WITH CONFIRMATION PROMPT
@@ -1259,7 +1261,6 @@ All P&L, fees, and stats have been recalculated automatically.`
             await AsyncStorage.removeItem(ACTIVE_SESSION_KEY);
             setSession(null);
             setTrades([]);
-            setOtpStep(false);
           }
         }
       ]
@@ -1686,6 +1687,79 @@ All P&L, fees, and stats have been recalculated automatically.`
     }));
   }, [trades]);
 
+  // FORGOT PASSWORD RECOVERY MODAL RENDERER
+  function renderForgotPasswordModal() {
+    if (!showForgotPassword) return null;
+    return (
+      <Modal
+        transparent
+        animationType="slide"
+        visible={showForgotPassword}
+        onRequestClose={() => setShowForgotPassword(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <View style={styles.modalHead}>
+              <Text style={styles.modalTitle}>🔑 Reset Journal Password</Text>
+              <TouchableOpacity onPress={() => setShowForgotPassword(false)}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.forgotPasswordDesc}>
+              Enter your registered email address to securely reset your password and restore your journal records.
+            </Text>
+
+            <View style={styles.inputWrap}>
+              <Text style={styles.label}>Registered Email Address</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. trader@example.com"
+                placeholderTextColor="#64748b"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={forgotEmail}
+                onChangeText={setForgotEmail}
+              />
+            </View>
+
+            <View style={styles.inputWrap}>
+              <Text style={styles.label}>New Password (min 6 chars)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter new password"
+                placeholderTextColor="#64748b"
+                secureTextEntry
+                value={forgotNewPassword}
+                onChangeText={setForgotNewPassword}
+              />
+            </View>
+
+            <View style={styles.inputWrap}>
+              <Text style={styles.label}>Confirm New Password</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Re-enter new password"
+                placeholderTextColor="#64748b"
+                secureTextEntry
+                value={forgotConfirmPassword}
+                onChangeText={setForgotConfirmPassword}
+              />
+            </View>
+
+            <TouchableOpacity style={styles.btnPrimary} onPress={handleResetPassword}>
+              <Text style={styles.btnPrimaryText}>✓ Save New Password & Sign In</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.btnCancelSecondary} onPress={() => setShowForgotPassword(false)}>
+              <Text style={styles.btnCancelSecondaryText}>Back to Sign In</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
   // 10. APP OPENING ANIMATION & PICTURE SCREEN
   if (showSplash) {
     return (
@@ -1833,6 +1907,7 @@ All P&L, fees, and stats have been recalculated automatically.`
             </Text>
           </View>
         </ScrollView>
+        {renderForgotPasswordModal()}
       </SafeAreaView>
     );
   }
@@ -2726,74 +2801,7 @@ All P&L, fees, and stats have been recalculated automatically.`
       )}
 
       {/* MODAL 4A: FORGOT PASSWORD RECOVERY MODAL */}
-      {showForgotPassword && (
-        <Modal
-          transparent
-          animationType="slide"
-          visible={showForgotPassword}
-          onRequestClose={() => setShowForgotPassword(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalBox}>
-              <View style={styles.modalHead}>
-                <Text style={styles.modalTitle}>🔑 Reset Journal Password</Text>
-                <TouchableOpacity onPress={() => setShowForgotPassword(false)}>
-                  <Text style={styles.modalCloseText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.forgotPasswordDesc}>
-                Enter your registered email address to securely reset your password and restore your journal records.
-              </Text>
-
-              <View style={styles.inputWrap}>
-                <Text style={styles.label}>Registered Email Address</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. trader@example.com"
-                  placeholderTextColor="#64748b"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  value={forgotEmail}
-                  onChangeText={setForgotEmail}
-                />
-              </View>
-
-              <View style={styles.inputWrap}>
-                <Text style={styles.label}>New Password (min 6 chars)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter new password"
-                  placeholderTextColor="#64748b"
-                  secureTextEntry
-                  value={forgotNewPassword}
-                  onChangeText={setForgotNewPassword}
-                />
-              </View>
-
-              <View style={styles.inputWrap}>
-                <Text style={styles.label}>Confirm New Password</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Re-enter new password"
-                  placeholderTextColor="#64748b"
-                  secureTextEntry
-                  value={forgotConfirmPassword}
-                  onChangeText={setForgotConfirmPassword}
-                />
-              </View>
-
-              <TouchableOpacity style={styles.btnPrimary} onPress={handleResetPassword}>
-                <Text style={styles.btnPrimaryText}>✓ Save New Password & Sign In</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.btnCancelSecondary} onPress={() => setShowForgotPassword(false)}>
-                <Text style={styles.btnCancelSecondaryText}>Back to Sign In</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-      )}
+      {renderForgotPasswordModal()}
 
       {/* MODAL 4B: CONNECT BROKER ACCOUNT MODAL */}
       {showBrokerModal && (
