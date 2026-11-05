@@ -45,7 +45,7 @@ const CURRENCIES = {
   EUR: { symbol: '€', locale: 'de-DE' }
 };
 
-const APP_VERSION = 'v2.3.2';
+const APP_VERSION = 'v2.3.3';
 const DEVELOPER_NAME = 'Abhishek';
 const GITHUB_REPO = 'https://github.com/uniqabhishek/Trading-Journal';
 const GITHUB_PROFILE = 'https://github.com/uniqabhishek';
@@ -315,6 +315,25 @@ const EMOTIONS = [
   { key: 'Revenge', label: '😤 Revenge', color: '#f43f5e' },
   { key: 'Anxious', label: '😰 Anxious', color: '#a855f7' }
 ];
+
+// Helper to detect and filter out demo/sample trades from real user accounts
+function isDemoOrMockTrade(t) {
+  if (!t) return false;
+  if (t.id === 1 || t.id === 2 || t.id === 3 || t.id === 4) return true;
+  if (t.id === '1' || t.id === '2' || t.id === '3' || t.id === '4') return true;
+  if (t.notes === 'Clean bounce off 64k support level.' ||
+      t.notes === 'Rejected at 4H trendline resistance.' ||
+      t.notes === 'London session morning momentum.' ||
+      t.notes === 'Holding active breakout position.') return true;
+  if (t.broker_order_id && (
+    t.broker_order_id.startsWith('dl_981240') ||
+    t.broker_order_id.startsWith('ex_449102') ||
+    t.broker_order_id.startsWith('sample_')
+  )) return true;
+  if (t.strategy === 'Delta Orderbook Breakout' && t.entry_price === 68150) return true;
+  if (t.strategy === 'Funding Rate Scalp' && t.entry_price === 2540) return true;
+  return false;
+}
 
 export default function App() {
   // Opening Splash State & Animations
@@ -719,12 +738,11 @@ export default function App() {
           await AsyncStorage.setItem(targetKey, JSON.stringify(currentTrades));
         }
 
-        // Clean any old mock demo broker trades from real user journals
-        const mockOrderIds = new Set(['dl_9812401', 'dl_9812402', 'dl_9812403', 'ex_4491021', 'ex_4491022', 'ex_4491023']);
+        // Aggressively clean any demo or mock trades from real user journals
         if (!active.isDemo && Array.isArray(currentTrades)) {
-          const hadMock = currentTrades.some(t => mockOrderIds.has(t.broker_order_id));
+          const hadMock = currentTrades.some(t => isDemoOrMockTrade(t));
           if (hadMock) {
-            currentTrades = currentTrades.filter(t => !mockOrderIds.has(t.broker_order_id));
+            currentTrades = currentTrades.filter(t => !isDemoOrMockTrade(t));
             await AsyncStorage.setItem(targetKey, JSON.stringify(currentTrades));
           }
         }
@@ -789,9 +807,10 @@ export default function App() {
       }
 
       if (bestList.length > 0) {
-        await AsyncStorage.setItem(key, JSON.stringify(bestList));
-        setTrades(bestList);
-        return bestList;
+        const cleanList = userId === 'demo' ? bestList : bestList.filter(t => !isDemoOrMockTrade(t));
+        await AsyncStorage.setItem(key, JSON.stringify(cleanList));
+        setTrades(cleanList);
+        return cleanList;
       }
 
       if (userId === 'demo') {
@@ -1100,6 +1119,26 @@ export default function App() {
     }
   }
 
+  async function handleClearMockTrades() {
+    Alert.alert(
+      'Purge Mock & Demo Trades 🧹',
+      'This will remove all sample/demo trades (e.g. BTCUSDT, ETHUSDT) from your journal so that only your genuine real trades remain.\n\nDo you want to proceed?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Purge Demo Trades',
+          style: 'destructive',
+          onPress: async () => {
+            const clean = trades.filter(t => !isDemoOrMockTrade(t));
+            const purgedCount = trades.length - clean.length;
+            await saveTradesToStorage(session?.userId || 'default', clean);
+            Alert.alert('Journal Cleaned! ✨', `Removed ${purgedCount} sample/demo trades. Your journal now shows only your genuine trade records.`);
+          }
+        }
+      ]
+    );
+  }
+
   async function handleSyncBroker(brokerItem) {
     setIsSyncingBroker(true);
     try {
@@ -1111,91 +1150,170 @@ export default function App() {
           throw new Error('Delta Exchange API Key and Secret are required to fetch real trades. Please reconnect your broker account with valid credentials.');
         }
 
-        const isIndia = brokerItem.region !== 'GLOBAL';
-        const baseUrl = isIndia ? 'https://api.india.delta.exchange' : 'https://api.delta.exchange';
-        const path = '/v2/orders/history';
-        const query = '?page_size=50';
-        const timestamp = Math.floor(Date.now() / 1000).toString();
-        const signatureData = 'GET' + timestamp + path + query;
+        // List domains to try: try user selected region first, then fallback to other region automatically
+        const isIndiaFirst = brokerItem.region !== 'GLOBAL';
+        const candidateDomains = isIndiaFirst
+          ? ['https://api.india.delta.exchange', 'https://api.delta.exchange']
+          : ['https://api.delta.exchange', 'https://api.india.delta.exchange'];
 
-        const hmac = forge.hmac.create();
-        hmac.start('sha256', apiSecret);
-        hmac.update(signatureData);
-        const signature = hmac.digest().toHex();
+        let fillsResult = [];
+        let successDomain = null;
+        let lastError = null;
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        for (const baseUrl of candidateDomains) {
+          // Attempt 1: Fetch from /v2/fills (Real trade fill executions)
+          try {
+            const path = '/v2/fills';
+            const query = '?page_size=50';
+            const timestamp = Math.floor(Date.now() / 1000).toString();
+            const signatureData = 'GET' + timestamp + path + query;
 
-        let res;
-        try {
-          res = await fetch(`${baseUrl}${path}${query}`, {
-            method: 'GET',
-            headers: {
-              'api-key': apiKey,
-              'timestamp': timestamp,
-              'signature': signature,
-              'Content-Type': 'application/json'
-            },
-            signal: controller.signal
-          });
-        } catch (fetchErr) {
-          throw new Error(`Connection timeout reaching Delta Exchange servers (${baseUrl}). Please verify your internet connection.`);
-        } finally {
-          clearTimeout(timeoutId);
+            const hmac = forge.hmac.create();
+            hmac.start('sha256', apiSecret);
+            hmac.update(signatureData);
+            const signature = hmac.digest().toHex();
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+            const res = await fetch(`${baseUrl}${path}${query}`, {
+              method: 'GET',
+              headers: {
+                'api-key': apiKey,
+                'timestamp': timestamp,
+                'signature': signature,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+              },
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            const data = await res.json();
+            if (res.ok && data.success && Array.isArray(data.result)) {
+              fillsResult = data.result;
+              successDomain = baseUrl;
+              break;
+            } else if (data.error) {
+              lastError = data.error?.context || data.error?.code || data.message;
+            }
+          } catch (e) {
+            lastError = e.message;
+          }
+
+          // Attempt 2: If /v2/fills was empty, also check /v2/orders/history
+          if (fillsResult.length === 0) {
+            try {
+              const path = '/v2/orders/history';
+              const query = '?page_size=50';
+              const timestamp = Math.floor(Date.now() / 1000).toString();
+              const signatureData = 'GET' + timestamp + path + query;
+
+              const hmac = forge.hmac.create();
+              hmac.start('sha256', apiSecret);
+              hmac.update(signatureData);
+              const signature = hmac.digest().toHex();
+
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+              const res = await fetch(`${baseUrl}${path}${query}`, {
+                method: 'GET',
+                headers: {
+                  'api-key': apiKey,
+                  'timestamp': timestamp,
+                  'signature': signature,
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json'
+                },
+                signal: controller.signal
+              });
+              clearTimeout(timeoutId);
+
+              const data = await res.json();
+              if (res.ok && data.success && Array.isArray(data.result)) {
+                // Filter for filled/closed orders
+                const closedOrders = data.result.filter(o => o.state === 'closed' || o.state === 'filled');
+                if (closedOrders.length > 0) {
+                  fillsResult = closedOrders;
+                  successDomain = baseUrl;
+                  break;
+                }
+              }
+            } catch (e) {}
+          }
         }
 
-        const data = await res.json();
-        if (!res.ok || data.success === false) {
-          const errMsg = data.error?.context || data.error?.code || data.message || `HTTP ${res.status}`;
-          throw new Error(`Delta Exchange API Error: ${errMsg}. Please verify your API Key and Secret.`);
+        if (!successDomain && fillsResult.length === 0 && lastError) {
+          throw new Error(`Delta Exchange Authentication Error: ${lastError}. Please verify that your API Key and Secret are active and have 'Read' permissions in Delta Exchange > API Management.`);
         }
 
-        const orders = data.result || [];
-        const closedOrders = orders.filter(o => o.state === 'closed' || o.state === 'filled');
+        // Clean any residual mock/demo trades from current journal first
+        const baseTrades = trades.filter(t => !isDemoOrMockTrade(t));
 
-        if (closedOrders.length === 0) {
-          Alert.alert('Delta Exchange Sync', 'Connected successfully to Delta Exchange! No closed orders found in your recent history.');
+        if (fillsResult.length === 0) {
+          // Connected successfully, but user has no closed orders in history
+          await saveTradesToStorage(session?.userId || 'default', baseTrades);
+          Alert.alert(
+            'Delta Exchange Connected! ⚡',
+            `Live connection verified with ${successDomain.includes('india') ? 'Delta India' : 'Delta Global'}.\n\nNo closed trade fills were found in your Delta Exchange history yet. As soon as you execute and close trades on Delta Exchange, tap Sync Trades to pull them live!`
+          );
           setIsSyncingBroker(false);
           return;
         }
 
-        const realTrades = closedOrders.map(o => {
-          const entryPrice = Number(o.average_fill_price || o.limit_price || 0);
-          const fees = Number(o.paid_commission || 0);
-          const pnl = o.realized_pnl !== undefined ? Number(o.realized_pnl) : (o.pnl !== undefined ? Number(o.pnl) : 0);
-          const qty = Number(o.size || 0);
-          const side = (o.side || 'buy').toLowerCase() === 'buy' ? 'LONG' : 'SHORT';
+        const realTrades = fillsResult.map(f => {
+          const price = Number(f.price || f.average_fill_price || f.limit_price || 0);
+          const qty = Number(f.size || f.quantity || 0);
+          const fee = Number(f.fee || f.paid_commission || 0);
+          const realizedPnl = f.realized_pnl !== undefined ? Number(f.realized_pnl) : (f.pnl !== undefined ? Number(f.pnl) : 0);
+          const side = (f.side || 'buy').toLowerCase() === 'buy' ? 'LONG' : 'SHORT';
+          const sym = f.product_symbol || f.symbol || 'CRYPTO';
+          
+          let fillTime = new Date().toISOString();
+          if (f.created_at) {
+            const rawTime = Number(f.created_at);
+            if (!isNaN(rawTime) && rawTime > 0) {
+              fillTime = rawTime > 10000000000000 ? new Date(Math.floor(rawTime / 1000)).toISOString() : new Date(rawTime).toISOString();
+            } else {
+              fillTime = String(f.created_at);
+            }
+          }
+
+          const fillId = f.id || f.order_id || Date.now();
 
           return {
             id: Date.now() + Math.floor(Math.random() * 100000),
-            broker_order_id: `dl_${o.id}`,
+            broker_order_id: `dl_fill_${fillId}`,
             market: 'CRYPTO',
             exchange: 'Delta Exchange',
-            symbol: o.symbol || 'CRYPTO',
+            symbol: sym,
             direction: side,
             status: 'CLOSED',
-            entry_price: entryPrice,
-            exit_price: entryPrice,
+            entry_price: price,
+            exit_price: price,
             quantity: qty,
-            fees: fees,
-            gross_pnl: pnl + fees,
-            net_pnl: pnl,
-            strategy: 'Delta Orderbook Execution',
-            emotion: 'Disciplined',
-            notes: `Real order #${o.id} synced live from Delta Exchange.`,
+            fees: fee,
+            gross_pnl: realizedPnl + fee,
+            net_pnl: realizedPnl,
+            strategy: 'Delta Live Fill Execution',
+            emotion: realizedPnl >= 0 ? 'Confident' : 'Disciplined',
+            notes: `Real live execution fill #${fillId} synced directly from Delta Exchange (${successDomain.includes('india') ? 'Delta India' : 'Delta Global'}).`,
             image_uri: null,
-            created_at: o.created_at || new Date().toISOString(),
-            closed_at: o.updated_at || o.created_at || new Date().toISOString()
+            created_at: fillTime,
+            closed_at: fillTime
           };
         });
 
-        const existingIds = new Set(trades.map(t => t.broker_order_id || t.id));
+        // Deduplicate against existing real trades
+        const existingIds = new Set(baseTrades.map(t => t.broker_order_id || t.id));
         const newFills = realTrades.filter(t => !existingIds.has(t.broker_order_id));
 
         if (newFills.length === 0) {
-          Alert.alert('Up to Date ⚡', 'All closed orders from Delta Exchange are already in your journal!');
+          await saveTradesToStorage(session?.userId || 'default', baseTrades);
+          Alert.alert('Up to Date ⚡', 'All current closed trades from Delta Exchange are already in your journal!');
         } else {
-          const updatedTrades = [...newFills, ...trades];
+          const updatedTrades = [...newFills, ...baseTrades];
           await saveTradesToStorage(session?.userId || 'default', updatedTrades);
 
           const updatedBrokers = connectedBrokers.map(b => b.id === brokerItem.id ? {
@@ -1206,8 +1324,8 @@ export default function App() {
           await saveBrokers(session?.userId || 'default', updatedBrokers);
 
           Alert.alert(
-            'Delta Exchange Sync Success! 🚀',
-            `Directly imported ${newFills.length} real executed positions from Delta Exchange!\n\nAll P&L, fees, and stats have been updated.`
+            'Delta Exchange Live Sync Success! 🚀',
+            `Directly imported ${newFills.length} live executed positions from ${successDomain.includes('india') ? 'Delta India' : 'Delta Global'}!\n\nAll P&L, fees, and stats updated live.`
           );
         }
       } else if (brokerItem.broker === 'EXNESS') {
@@ -1220,7 +1338,7 @@ export default function App() {
         Alert.alert('Broker Connected', `Live sync ready for ${brokerItem.accountName}.`);
       }
     } catch (e) {
-      Alert.alert('Broker Sync Notice', e.message);
+      Alert.alert('Delta Exchange Sync Notice', e.message);
     } finally {
       setIsSyncingBroker(false);
     }
@@ -2623,6 +2741,9 @@ export default function App() {
                 <View>
                   <Text style={styles.cardHeading}>⚡ Connected Brokers & API Sync</Text>
                   <Text style={styles.cardSub}>Directly ingest executions from Delta Exchange, Exness, Binance</Text>
+                  <TouchableOpacity style={styles.btnPurgeDemoSmall} onPress={handleClearMockTrades}>
+                    <Text style={styles.btnPurgeDemoSmallText}>🧹 Purge Demo Trades</Text>
+                  </TouchableOpacity>
                 </View>
                 <TouchableOpacity style={styles.btnAddBrokerSmall} onPress={() => setShowBrokerModal(true)}>
                   <Text style={styles.btnAddBrokerSmallText}>+ Connect</Text>
@@ -4434,6 +4555,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8
+  },
+  btnPurgeDemoSmall: {
+    backgroundColor: 'rgba(244, 63, 94, 0.15)',
+    borderWidth: 1,
+    borderColor: '#f43f5e',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    marginTop: 6,
+    alignSelf: 'flex-start'
+  },
+  btnPurgeDemoSmallText: {
+    color: '#f43f5e',
+    fontSize: 11,
+    fontWeight: '700'
   },
   btnAddBrokerSmall: {
     backgroundColor: 'rgba(56, 189, 248, 0.15)',

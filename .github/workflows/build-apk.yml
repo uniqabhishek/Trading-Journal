@@ -11,7 +11,7 @@ on:
       version:
         description: 'Release version tag (e.g. v2.3.0, v2.3.1)'
         required: false
-        default: 'v2.3.2'
+        default: 'v2.3.3'
 
 permissions:
   contents: write
@@ -114,7 +114,7 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.version }}"
           if [ -z "$TAG" ]; then
-            TAG="v2.3.2"
+            TAG="v2.3.3"
           fi
           echo "TAG_NAME=$TAG" >> $GITHUB_OUTPUT
 
@@ -128,14 +128,12 @@ jobs:
             ### 📱 TradeMind Production Release APK (${{ steps.vars.outputs.TAG_NAME }})
             Official Android Release created & architected by **Abhishek**.
             
-            **✨ Release v2.3.2 Production Release & Broker Integration:**
-            - ⚡ **Real Delta Exchange REST API Sync**: Direct HMAC-SHA256 authenticated sync from Delta Exchange (India & Global). Live ingestion of real filled and closed orders with accurate execution prices, commission fees, and realized P&L.
-            - 🌐 **Real Exness MT5 Statement & Trade Ingestion**: Seamless parser for Exness MetaTrader 5 trade reports and closed position lines. Zero fake or demo trades in your personal journal.
-            - 🛡️ **Purged Fake & Demo Brokers**: All mock trades and pre-connected fake brokers removed from private user accounts. Only your real trading data is tracked.
-            - 🔄 **In-App Updater Enhancements**: Fixed package installer launch flags (`FLAG_ACTIVITY_NEW_TASK` + `FLAG_GRANT_READ_URI_PERMISSION`) and added system installer fallback. Removed redundant re-download button when the app is already up to date.
-            - 🔑 **Auth Screen Password Recovery**: One-tap password reset directly on the login screen with email verification.
-            - 📱 **Universal Dual-Architecture Build**: Full native support for `arm64-v8a` and `armeabi-v7a` chipsets.
-            - 🔐 **Permanent Keystore**: 100% data safety across all future updates.
+            **✨ Release v2.3.3 Live Real Broker Data & Demo Trade Purge:**
+            - ⚡ **Live Delta Exchange Fills Execution Engine**: Multi-endpoint live querying (`/v2/fills` and `/v2/orders/history`) with automatic failover between Delta India (`api.india.delta.exchange`) and Delta Global (`api.delta.exchange`). Live cryptographic signing with HMAC-SHA256. Ingests genuine product symbols, sides, fill prices, commission fees, and realized P&L.
+            - 🧹 **Complete Demo & Mock Trade Elimination**: Automatically purges any legacy demo trades (BTC 64200, ETH 3450, etc.) from real user journals. Added a dedicated one-tap "Purge Demo Trades" tool in the Connected Brokers hub.
+            - 🌐 **Exness MT5 Statement Parser**: Ingests real MetaTrader 5 ticket executions without any mock data.
+            - 🔄 **Smart In-App Updater**: Clean status display without redundant re-download buttons, and reliable package installer launching.
+            - 🔐 **Permanent Keystore & Zero Data Loss**: Universal dual-architecture build for all Android phones.
             
             **📲 Installation:**
             1. Download `TradeMind.apk` below directly to your smartphone.
