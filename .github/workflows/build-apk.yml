@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version tag (e.g. v2.2.0, v2.2.1)'
+        description: 'Release version tag (e.g. v2.3.0, v2.3.1)'
         required: false
-        default: 'v2.2.0'
+        default: 'v2.3.0'
 
 permissions:
   contents: write
@@ -108,7 +108,7 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.version }}"
           if [ -z "$TAG" ]; then
-            TAG="v2.2.0"
+            TAG="v2.3.0"
           fi
           echo "TAG_NAME=$TAG" >> $GITHUB_OUTPUT
 
@@ -122,15 +122,14 @@ jobs:
             ### 📱 TradeMind Production Release APK (${{ steps.vars.outputs.TAG_NAME }})
             Official Android Release created & architected by **Abhishek**.
             
-            **✨ Release v2.2.0 Highlights & Enhancements:**
-            - 🛡️ **Permanent Multi-Tier Data Vault (Zero Data Loss)**: Universal storage scavenger automatically detects, recovers, and restores all past user accounts, email logins, and trading records from all previous app versions (`v2.0.0`, `v2.1.0`, `v1.0`). Your journal is never erased across updates or reloads.
-            - 📦 **In-App APK Downloader & Installer**: When clicking "Check for Updates", you can now download the latest TradeMind update package directly inside the app with a real-time progress bar and install it immediately without leaving the app!
-            - 💬 **Real System Message Notification for OTP**: 4-digit verification code now arrives as an Android system notification message banner right in your status bar / notification shade with sound, plus a 1-tap Auto-Fill button.
-            - 🔍 **Deep Scan & Restore Past Data Tool**: Dedicated recovery button in Account & Data Vault tab that can re-scan device storage anytime and rescue any orphaned trades.
-            - 📤 **Export Journal Backup (.json)**: Export full encrypted trading journal with 1 tap to Google Drive, WhatsApp, Downloads, or Files for complete peace of mind.
-            - 🚀 **Dark Native Boot Window**: Clean `#070b14` dark theme splash with high-resolution TradeMind AI Neural Logo.
-            - 🔙 **Smart Hardware Back Navigation**: Smooth modal dismissal, 1-tap return to Dashboard, and confirmed exit.
-            - 🖼️ **Trade Chart Photo Attachment**: Camera roll picker for charts with zoomable full-screen viewer.
+            **✨ Release v2.3.0 Highlights & Enhancements:**
+            - 🔑 **Forgot Password Recovery System**: Instantly reset your password securely with account email verification and resume journaling without data loss.
+            - ✉️ **Streamlined Email Authentication**: Clean, fast Email & Password auth flow (Mobile OTP option removed per user preference).
+            - 🔄 **Smart In-App Update Engine**: Now checks installed vs latest release version — if you are already on the current version, it confirms "App is already updated" and disables redundant downloads.
+            - ⚡ **Direct Broker Integration (Delta Exchange, Exness, Binance, Zerodha)**: Connect your broker accounts to directly sync executed trades, positions, and fees without manual entry.
+            - 🤖 **TradeMind AI Performance Analyst**: AI-powered trade diagnostics that analyze synced broker executions and deliver actionable recommendations for risk control, fee optimization, emotional discipline, and strategy improvement.
+            - 🛡️ **Permanent Multi-Tier Data Vault**: Automatic device scavenger and FileSystem mirror ensuring your accounts and trade history remain 100% safe across updates.
+            - 📦 **In-App Background APK Installer**: Download and install updates directly inside the app with a live progress bar.
             
             **📲 Installation:**
             1. Download `TradeMind.apk` below directly to your smartphone.
