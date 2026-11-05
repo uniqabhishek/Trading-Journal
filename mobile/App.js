@@ -1,3 +1,4 @@
+import forge from 'node-forge';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   SafeAreaView,
@@ -44,7 +45,7 @@ const CURRENCIES = {
   EUR: { symbol: '€', locale: 'de-DE' }
 };
 
-const APP_VERSION = 'v2.3.1';
+const APP_VERSION = 'v2.3.2';
 const DEVELOPER_NAME = 'Abhishek';
 const GITHUB_REPO = 'https://github.com/uniqabhishek/Trading-Journal';
 const GITHUB_PROFILE = 'https://github.com/uniqabhishek';
@@ -343,14 +344,20 @@ export default function App() {
   const [forgotNewPassword, setForgotNewPassword] = useState('');
   const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
 
-  // Broker Integration & Sync State
+  // Broker Integration & Sync State (Live API & Real Statements)
   const [connectedBrokers, setConnectedBrokers] = useState([]);
   const [showBrokerModal, setShowBrokerModal] = useState(false);
   const [brokerType, setBrokerType] = useState('DELTA');
+  const [deltaRegion, setDeltaRegion] = useState('INDIA'); // 'INDIA' or 'GLOBAL'
   const [brokerAccountName, setBrokerAccountName] = useState('');
   const [brokerApiKey, setBrokerApiKey] = useState('');
   const [brokerApiSecret, setBrokerApiSecret] = useState('');
   const [isSyncingBroker, setIsSyncingBroker] = useState(false);
+
+  // Exness MT5 Statement & Trades Import State
+  const [showExnessImportModal, setShowExnessImportModal] = useState(false);
+  const [exnessImportText, setExnessImportText] = useState('');
+  const [activeExnessBroker, setActiveExnessBroker] = useState(null);
 
   // AI Trading Analyst State
   const [showAiModal, setShowAiModal] = useState(false);
@@ -441,6 +448,10 @@ export default function App() {
         setShowAiModal(false);
         return true;
       }
+      if (showExnessImportModal) {
+        setShowExnessImportModal(false);
+        return true;
+      }
 
       // Step B: If not on dashboard, return to dashboard (main menu)
       if (tab !== 'dashboard') {
@@ -462,7 +473,7 @@ export default function App() {
 
     const backHandlerSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => backHandlerSub.remove();
-  }, [updateModalVisible, updateStatus, viewingImage, closingTrade, editingTrade, showDevModal, showForgotPassword, showBrokerModal, showAiModal, tab]);
+  }, [updateModalVisible, updateStatus, viewingImage, closingTrade, editingTrade, showDevModal, showForgotPassword, showBrokerModal, showAiModal, showExnessImportModal, tab]);
 
   // 2. RUN SPLASH OPENING ANIMATION ON START
   useEffect(() => {
@@ -706,7 +717,16 @@ export default function App() {
         if ((!currentTrades || currentTrades.length === 0) && largestTradeList.length > 0) {
           currentTrades = largestTradeList;
           await AsyncStorage.setItem(targetKey, JSON.stringify(currentTrades));
-          console.log(`Rescued ${currentTrades.length} trades into ${targetKey}!`);
+        }
+
+        // Clean any old mock demo broker trades from real user journals
+        const mockOrderIds = new Set(['dl_9812401', 'dl_9812402', 'dl_9812403', 'ex_4491021', 'ex_4491022', 'ex_4491023']);
+        if (!active.isDemo && Array.isArray(currentTrades)) {
+          const hadMock = currentTrades.some(t => mockOrderIds.has(t.broker_order_id));
+          if (hadMock) {
+            currentTrades = currentTrades.filter(t => !mockOrderIds.has(t.broker_order_id));
+            await AsyncStorage.setItem(targetKey, JSON.stringify(currentTrades));
+          }
         }
 
         setTrades(currentTrades || []);
@@ -869,40 +889,26 @@ export default function App() {
     Alert.alert('Password Reset Successful! 🎉', `Welcome back, ${account.name}! Your journal has been loaded securely.`);
   }
 
-  // 7. BROKER INTEGRATION ENGINE (DELTA EXCHANGE, EXNESS, ETC.)
+  // 7. REAL BROKER INTEGRATION ENGINE (DELTA EXCHANGE LIVE REST API & EXNESS MT5 STATEMENTS)
   async function loadBrokers(userId) {
     try {
       const key = `${BROKERS_STORAGE_KEY}_${userId}`;
       const raw = await AsyncStorage.getItem(key);
       if (raw) {
-        setConnectedBrokers(JSON.parse(raw));
+        const list = JSON.parse(raw);
+        // Filter out any past fake demo brokers (b_delta_1, b_exness_1) from real accounts
+        const cleanList = userId === 'demo' ? list : list.filter(b => b.id !== 'b_delta_1' && b.id !== 'b_exness_1');
+        setConnectedBrokers(cleanList);
+        if (cleanList.length !== list.length) {
+          await AsyncStorage.setItem(key, JSON.stringify(cleanList));
+        }
       } else {
-        // Default connected demo broker for instant experience
-        const defaultBrokers = [
-          {
-            id: 'b_delta_1',
-            broker: 'DELTA',
-            accountName: 'Delta Pro Futures',
-            apiKey: 'dl_prod_******',
-            isConnected: true,
-            lastSynced: new Date(Date.now() - 3600000 * 2).toISOString(),
-            syncedTradesCount: 3
-          },
-          {
-            id: 'b_exness_1',
-            broker: 'EXNESS',
-            accountName: 'Exness MT5 Raw Spread',
-            apiKey: 'ex_mt5_******',
-            isConnected: true,
-            lastSynced: new Date(Date.now() - 3600000 * 4).toISOString(),
-            syncedTradesCount: 3
-          }
-        ];
-        await AsyncStorage.setItem(key, JSON.stringify(defaultBrokers));
-        setConnectedBrokers(defaultBrokers);
+        // Real user accounts start completely clean without fake brokers!
+        setConnectedBrokers([]);
       }
     } catch (e) {
       console.warn('Error loading brokers:', e);
+      setConnectedBrokers([]);
     }
   }
 
@@ -920,18 +926,29 @@ export default function App() {
       return Alert.alert('Account Name Required', 'Please enter a nickname for this broker account (e.g. My Delta Account).');
     }
 
+    const cleanKey = brokerApiKey.trim();
+    const cleanSecret = brokerApiSecret.trim();
+
+    if (brokerType === 'DELTA') {
+      if (!cleanKey || !cleanSecret) {
+        return Alert.alert('Credentials Required', 'Please enter your Delta Exchange API Key and Secret (generated in Delta Exchange -> API Management).');
+      }
+    }
+
     const newBroker = {
       id: `b_${brokerType.toLowerCase()}_${Date.now()}`,
       broker: brokerType,
       accountName: brokerAccountName.trim(),
-      apiKey: brokerApiKey.trim() ? `${brokerApiKey.trim().slice(0, 4)}******` : 'connected_auth',
+      apiKey: cleanKey,
+      apiSecret: cleanSecret,
+      region: deltaRegion || 'INDIA',
       isConnected: true,
-      lastSynced: new Date().toISOString(),
+      lastSynced: null,
       syncedTradesCount: 0
     };
 
     const updated = [newBroker, ...connectedBrokers];
-    await saveBrokers(session.userId, updated);
+    await saveBrokers(session?.userId || 'default', updated);
 
     setShowBrokerModal(false);
     setBrokerAccountName('');
@@ -940,52 +957,270 @@ export default function App() {
 
     Alert.alert(
       'Broker Connected! ⚡',
-      `Successfully linked ${BROKER_DEFS[brokerType]?.name || brokerType}.
-
-Tap "Sync Trades" anytime to directly pull executed positions into your journal.`
+      `Successfully linked ${BROKER_DEFS[brokerType]?.name || brokerType}.\n\nTap "Sync Trades" on your broker card to directly pull your real executed positions.`
     );
+  }
+
+  // Universal Parser for Exness MT5 / MT4 Closed Trade Reports & Lines
+  function parseExnessTrades(text) {
+    if (!text || typeof text !== 'string') return [];
+    const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const parsed = [];
+
+    for (const line of rawLines) {
+      if (/ticket|time|symbol|type|volume|profit|open price/i.test(line) && line.split(/[,\t| ]+/).length >= 4) {
+        continue;
+      }
+
+      let tokens = line.split(/[,\t|]+/).map(t => t.trim()).filter(Boolean);
+      if (tokens.length < 4) {
+        tokens = line.split(/\s+/).map(t => t.trim()).filter(Boolean);
+      }
+      if (tokens.length < 4) continue;
+
+      let symbol = null;
+      for (let i = 0; i < tokens.length; i++) {
+        const clean = tokens[i].toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (/^(XAUUSD|EURUSD|GBPUSD|USDJPY|USDCAD|AUDUSD|NZDUSD|USDCHF|BTCUSD|ETHUSD|USOIL|UKOIL|NIFTY|BANKNIFTY|[A-Z]{6,7})$/.test(clean)) {
+          symbol = clean;
+          break;
+        }
+      }
+      if (!symbol) continue;
+
+      let direction = 'LONG';
+      for (let i = 0; i < tokens.length; i++) {
+        if (/^buy$/i.test(tokens[i])) { direction = 'LONG'; break; }
+        if (/^sell$/i.test(tokens[i])) { direction = 'SHORT'; break; }
+      }
+
+      const nums = [];
+      for (let i = 0; i < tokens.length; i++) {
+        const tok = tokens[i];
+        if (/\d{4}[-.\/]\d{2}[-.\/]\d{2}/.test(tok) || /\d{1,2}:\d{2}(:\d{2})?/.test(tok)) {
+          continue;
+        }
+        const val = parseFloat(tok.replace(/[^0-9.-]/g, ''));
+        if (!isNaN(val) && isFinite(val)) {
+          nums.push(val);
+        }
+      }
+
+      if (nums.length < 3) continue;
+
+      let ticket = `ex_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+      let metrics = [...nums];
+      if (nums[0] > 1000 && Number.isInteger(nums[0])) {
+        ticket = String(nums[0]);
+        metrics.shift();
+      }
+
+      let qty = 0.1;
+      let entryPrice = 0;
+      let exitPrice = 0;
+      let profit = 0;
+
+      if (metrics.length >= 4) {
+        qty = metrics[0];
+        entryPrice = metrics[1];
+        exitPrice = metrics[2];
+        profit = metrics[metrics.length - 1];
+      } else if (metrics.length === 3) {
+        entryPrice = metrics[0];
+        exitPrice = metrics[1];
+        profit = metrics[2];
+      }
+
+      parsed.push({
+        id: Date.now() + Math.floor(Math.random() * 100000),
+        broker_order_id: `ex_${ticket}`,
+        market: symbol.includes('USD') && !symbol.includes('BTC') ? 'FOREX' : 'CRYPTO',
+        exchange: 'Exness MT5',
+        symbol: symbol,
+        direction: direction,
+        status: 'CLOSED',
+        entry_price: entryPrice,
+        exit_price: exitPrice,
+        quantity: qty,
+        fees: 0,
+        gross_pnl: profit,
+        net_pnl: profit,
+        strategy: 'Exness MT5 Execution',
+        emotion: profit >= 0 ? 'Disciplined' : 'Confident',
+        notes: `Real trade imported from Exness MT5 (Ticket #${ticket})`,
+        image_uri: null,
+        created_at: new Date().toISOString(),
+        closed_at: new Date().toISOString()
+      });
+    }
+
+    return parsed;
+  }
+
+  async function handleImportExnessTrades() {
+    if (!exnessImportText.trim()) {
+      return Alert.alert('Trade Text Required', 'Please paste closed trade lines or MT5 report text from your Exness account.');
+    }
+
+    const realTrades = parseExnessTrades(exnessImportText);
+    if (realTrades.length === 0) {
+      return Alert.alert(
+        'Format Notice',
+        'Could not detect closed trade lines. Please ensure your pasted text contains ticket, symbol (e.g. XAUUSD, EURUSD), open/close price, and profit.'
+      );
+    }
+
+    // Deduplicate against existing trades
+    const existingIds = new Set(trades.map(t => t.broker_order_id || t.id));
+    const newTrades = realTrades.filter(t => !existingIds.has(t.broker_order_id));
+
+    if (newTrades.length === 0) {
+      Alert.alert('Already Ingested', 'All pasted trades are already present in your journal.');
+    } else {
+      const updated = [...newTrades, ...trades];
+      await saveTradesToStorage(session?.userId || 'default', updated);
+
+      if (activeExnessBroker) {
+        const updatedBrokers = connectedBrokers.map(b => b.id === activeExnessBroker.id ? {
+          ...b,
+          lastSynced: new Date().toISOString(),
+          syncedTradesCount: (b.syncedTradesCount || 0) + newTrades.length
+        } : b);
+        await saveBrokers(session?.userId || 'default', updatedBrokers);
+      }
+
+      setShowExnessImportModal(false);
+      setExnessImportText('');
+      setActiveExnessBroker(null);
+
+      Alert.alert(
+        'Exness Trades Imported! 🚀',
+        `Successfully imported ${newTrades.length} real trades from your Exness MT5 statement!\n\nAll P&L, win rates, and AI performance scores have been updated.`
+      );
+    }
   }
 
   async function handleSyncBroker(brokerItem) {
     setIsSyncingBroker(true);
     try {
-      // Simulate live network sync with broker endpoint
-      await new Promise(r => setTimeout(r, 900));
+      if (brokerItem.broker === 'DELTA') {
+        const apiKey = (brokerItem.apiKey || '').trim();
+        const apiSecret = (brokerItem.apiSecret || '').trim();
 
-      const samples = SAMPLE_BROKER_EXECUTIONS[brokerItem.broker] || [];
-      if (samples.length === 0) {
-        Alert.alert('Sync Finished', `No new closed orders found on ${brokerItem.accountName}.`);
+        if (!apiKey || !apiSecret) {
+          throw new Error('Delta Exchange API Key and Secret are required to fetch real trades. Please reconnect your broker account with valid credentials.');
+        }
+
+        const isIndia = brokerItem.region !== 'GLOBAL';
+        const baseUrl = isIndia ? 'https://api.india.delta.exchange' : 'https://api.delta.exchange';
+        const path = '/v2/orders/history';
+        const query = '?page_size=50';
+        const timestamp = Math.floor(Date.now() / 1000).toString();
+        const signatureData = 'GET' + timestamp + path + query;
+
+        const hmac = forge.hmac.create();
+        hmac.start('sha256', apiSecret);
+        hmac.update(signatureData);
+        const signature = hmac.digest().toHex();
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+        let res;
+        try {
+          res = await fetch(`${baseUrl}${path}${query}`, {
+            method: 'GET',
+            headers: {
+              'api-key': apiKey,
+              'timestamp': timestamp,
+              'signature': signature,
+              'Content-Type': 'application/json'
+            },
+            signal: controller.signal
+          });
+        } catch (fetchErr) {
+          throw new Error(`Connection timeout reaching Delta Exchange servers (${baseUrl}). Please verify your internet connection.`);
+        } finally {
+          clearTimeout(timeoutId);
+        }
+
+        const data = await res.json();
+        if (!res.ok || data.success === false) {
+          const errMsg = data.error?.context || data.error?.code || data.message || `HTTP ${res.status}`;
+          throw new Error(`Delta Exchange API Error: ${errMsg}. Please verify your API Key and Secret.`);
+        }
+
+        const orders = data.result || [];
+        const closedOrders = orders.filter(o => o.state === 'closed' || o.state === 'filled');
+
+        if (closedOrders.length === 0) {
+          Alert.alert('Delta Exchange Sync', 'Connected successfully to Delta Exchange! No closed orders found in your recent history.');
+          setIsSyncingBroker(false);
+          return;
+        }
+
+        const realTrades = closedOrders.map(o => {
+          const entryPrice = Number(o.average_fill_price || o.limit_price || 0);
+          const fees = Number(o.paid_commission || 0);
+          const pnl = o.realized_pnl !== undefined ? Number(o.realized_pnl) : (o.pnl !== undefined ? Number(o.pnl) : 0);
+          const qty = Number(o.size || 0);
+          const side = (o.side || 'buy').toLowerCase() === 'buy' ? 'LONG' : 'SHORT';
+
+          return {
+            id: Date.now() + Math.floor(Math.random() * 100000),
+            broker_order_id: `dl_${o.id}`,
+            market: 'CRYPTO',
+            exchange: 'Delta Exchange',
+            symbol: o.symbol || 'CRYPTO',
+            direction: side,
+            status: 'CLOSED',
+            entry_price: entryPrice,
+            exit_price: entryPrice,
+            quantity: qty,
+            fees: fees,
+            gross_pnl: pnl + fees,
+            net_pnl: pnl,
+            strategy: 'Delta Orderbook Execution',
+            emotion: 'Disciplined',
+            notes: `Real order #${o.id} synced live from Delta Exchange.`,
+            image_uri: null,
+            created_at: o.created_at || new Date().toISOString(),
+            closed_at: o.updated_at || o.created_at || new Date().toISOString()
+          };
+        });
+
+        const existingIds = new Set(trades.map(t => t.broker_order_id || t.id));
+        const newFills = realTrades.filter(t => !existingIds.has(t.broker_order_id));
+
+        if (newFills.length === 0) {
+          Alert.alert('Up to Date ⚡', 'All closed orders from Delta Exchange are already in your journal!');
+        } else {
+          const updatedTrades = [...newFills, ...trades];
+          await saveTradesToStorage(session?.userId || 'default', updatedTrades);
+
+          const updatedBrokers = connectedBrokers.map(b => b.id === brokerItem.id ? {
+            ...b,
+            lastSynced: new Date().toISOString(),
+            syncedTradesCount: (b.syncedTradesCount || 0) + newFills.length
+          } : b);
+          await saveBrokers(session?.userId || 'default', updatedBrokers);
+
+          Alert.alert(
+            'Delta Exchange Sync Success! 🚀',
+            `Directly imported ${newFills.length} real executed positions from Delta Exchange!\n\nAll P&L, fees, and stats have been updated.`
+          );
+        }
+      } else if (brokerItem.broker === 'EXNESS') {
+        // Open real Exness statement import dialog
         setIsSyncingBroker(false);
+        setActiveExnessBroker(brokerItem);
+        setShowExnessImportModal(true);
         return;
-      }
-
-      // Avoid duplicates
-      const existingIds = new Set(trades.map(t => t.broker_order_id || t.id));
-      const newFills = samples.filter(s => !existingIds.has(s.broker_order_id));
-
-      if (newFills.length === 0) {
-        Alert.alert('Up to Date ⚡', `All trades from ${brokerItem.accountName} are already in your journal!`);
       } else {
-        const updatedTrades = [...newFills, ...trades];
-        await saveTradesToStorage(session.userId, updatedTrades);
-
-        // Update broker item sync info
-        const updatedBrokers = connectedBrokers.map(b => b.id === brokerItem.id ? {
-          ...b,
-          lastSynced: new Date().toISOString(),
-          syncedTradesCount: (b.syncedTradesCount || 0) + newFills.length
-        } : b);
-        await saveBrokers(session.userId, updatedBrokers);
-
-        Alert.alert(
-          'Broker Sync Success! 🚀',
-          `Directly imported ${newFills.length} new executed positions from ${brokerItem.accountName} (${BROKER_DEFS[brokerItem.broker]?.name})!
-
-All P&L, fees, and stats have been recalculated automatically.`
-        );
+        Alert.alert('Broker Connected', `Live sync ready for ${brokerItem.accountName}.`);
       }
     } catch (e) {
-      Alert.alert('Sync Error', 'Could not sync from broker: ' + e.message);
+      Alert.alert('Broker Sync Notice', e.message);
     } finally {
       setIsSyncingBroker(false);
     }
@@ -999,7 +1234,7 @@ All P&L, fees, and stats have been recalculated automatically.`
         style: 'destructive',
         onPress: async () => {
           const updated = connectedBrokers.filter(b => b.id !== brokerId);
-          await saveBrokers(session.userId, updated);
+          await saveBrokers(session?.userId || 'default', updated);
         }
       }
     ]);
@@ -1497,12 +1732,12 @@ All P&L, fees, and stats have been recalculated automatically.`
     try {
       setUpdateStatus('downloading');
       setUpdateProgress(0);
-      setDownloadSpeedText('Starting download...');
+      setDownloadSpeedText('Connecting to update server...');
 
-      const tag = releaseInfo?.tag_name || 'v2.2.0';
+      const tag = releaseInfo?.tag_name || APP_VERSION;
       const apkAsset = releaseInfo?.assets?.find(a => a.name && a.name.endsWith('.apk'));
       const downloadUrl = apkAsset?.browser_download_url || `https://github.com/uniqabhishek/Trading-Journal/releases/download/${tag}/TradeMind.apk`;
-      const targetUri = FileSystem.documentDirectory + 'TradeMind_Update.apk';
+      const targetUri = FileSystem.cacheDirectory + 'TradeMind_Update.apk';
 
       // Delete existing update file if present
       const prevInfo = await FileSystem.getInfoAsync(targetUri);
@@ -1531,15 +1766,8 @@ All P&L, fees, and stats have been recalculated automatically.`
       setDownloadedApkUri(result.uri);
       setUpdateStatus('completed');
 
-      // Prompt to install update immediately
-      Alert.alert(
-        'Update Download Complete! 🎉',
-        'TradeMind update has been downloaded.\n\nTap "Install Now" to install the update. All your accounts, login details, and trading journal records are safely preserved.',
-        [
-          { text: 'Install Later', style: 'cancel' },
-          { text: 'Install Now', onPress: () => triggerApkInstall(result.uri) }
-        ]
-      );
+      // Auto-trigger installation
+      triggerApkInstall(result.uri);
     } catch (e) {
       setUpdateStatus('error');
       Alert.alert('Download Error', e.message);
@@ -1548,21 +1776,36 @@ All P&L, fees, and stats have been recalculated automatically.`
 
   async function triggerApkInstall(apkUri) {
     try {
-      const uriToInstall = apkUri || downloadedApkUri;
+      const uriToInstall = apkUri || downloadedApkUri || (FileSystem.cacheDirectory + 'TradeMind_Update.apk');
       if (!uriToInstall) return;
 
       if (Platform.OS === 'android') {
         const contentUri = await FileSystem.getContentUriAsync(uriToInstall);
-        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-          data: contentUri,
-          flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
-          type: 'application/vnd.android.package-archive'
-        });
+        try {
+          // FLAG_GRANT_READ_URI_PERMISSION (1) | FLAG_ACTIVITY_NEW_TASK (268435456) = 268435457
+          await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+            data: contentUri,
+            flags: 268435457,
+            type: 'application/vnd.android.package-archive'
+          });
+        } catch (launcherErr) {
+          console.warn('IntentLauncher failed, falling back to Sharing:', launcherErr);
+          const canShare = await Sharing.isAvailableAsync();
+          if (canShare) {
+            await Sharing.shareAsync(uriToInstall, {
+              mimeType: 'application/vnd.android.package-archive',
+              dialogTitle: 'Install TradeMind Update'
+            });
+          } else {
+            const tag = releaseInfo?.tag_name || APP_VERSION;
+            Linking.openURL(`https://github.com/uniqabhishek/Trading-Journal/releases/download/${tag}/TradeMind.apk`);
+          }
+        }
       } else {
         Alert.alert('Notice', 'In-app APK installation is supported on Android devices.');
       }
     } catch (e) {
-      Alert.alert('Installer Launch Notice', 'Could not open installer: ' + e.message);
+      Alert.alert('Installer Notice', 'Could not launch package installer: ' + e.message);
     }
   }
 
@@ -2843,6 +3086,30 @@ All P&L, fees, and stats have been recalculated automatically.`
                 <Text style={styles.brokerInfoDesc}>{BROKER_DEFS[brokerType]?.desc}</Text>
               </View>
 
+              {brokerType === 'DELTA' && (
+                <View style={styles.inputWrap}>
+                  <Text style={styles.label}>Delta Exchange Server Region</Text>
+                  <View style={styles.deltaRegionToggle}>
+                    <TouchableOpacity
+                      style={[styles.deltaRegionBtn, deltaRegion === 'INDIA' && styles.deltaRegionBtnActive]}
+                      onPress={() => setDeltaRegion('INDIA')}
+                    >
+                      <Text style={[styles.deltaRegionBtnText, deltaRegion === 'INDIA' && styles.textWhite]}>
+                        🇮🇳 Delta India (api.india.delta.exchange)
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.deltaRegionBtn, deltaRegion === 'GLOBAL' && styles.deltaRegionBtnActive]}
+                      onPress={() => setDeltaRegion('GLOBAL')}
+                    >
+                      <Text style={[styles.deltaRegionBtnText, deltaRegion === 'GLOBAL' && styles.textWhite]}>
+                        🌐 Delta Global (api.delta.exchange)
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
               <View style={styles.inputWrap}>
                 <Text style={styles.label}>Account Nickname *</Text>
                 <TextInput
@@ -2879,6 +3146,53 @@ All P&L, fees, and stats have been recalculated automatically.`
 
               <TouchableOpacity style={styles.btnPrimary} onPress={handleConnectBroker}>
                 <Text style={styles.btnPrimaryText}>⚡ Connect & Enable Direct Sync</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
+
+            {/* MODAL 4C: EXNESS MT5 STATEMENT & CLOSED TRADES IMPORT MODAL */}
+      {showExnessImportModal && (
+        <Modal
+          transparent
+          animationType="slide"
+          visible={showExnessImportModal}
+          onRequestClose={() => setShowExnessImportModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalBox}>
+              <View style={styles.modalHead}>
+                <Text style={styles.modalTitle}>🌐 Exness MT5 Trade Statement</Text>
+                <TouchableOpacity onPress={() => setShowExnessImportModal(false)}>
+                  <Text style={styles.modalCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.brokerModalDesc}>
+                Import real executed trades from your Exness account ({activeExnessBroker?.accountName || 'MT5'}).
+              </Text>
+
+              <Text style={styles.label}>Paste MT5 Trade History or Closed Orders Text</Text>
+              <TextInput
+                style={styles.exnessTextInput}
+                placeholder={"Paste lines copied from MT5 history or CSV statement, e.g.:\n14285910 2026.11.04 12:30 buy 0.10 XAUUSD 2730.20 2745.50 153.00"}
+                placeholderTextColor="#64748b"
+                multiline
+                numberOfLines={6}
+                value={exnessImportText}
+                onChangeText={setExnessImportText}
+              />
+
+              <TouchableOpacity style={styles.btnPrimary} onPress={handleImportExnessTrades}>
+                <Text style={styles.btnPrimaryText}>📥 Parse & Ingest Real Trades</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.btnCancelSecondary}
+                onPress={() => setShowExnessImportModal(false)}
+              >
+                <Text style={styles.btnCancelSecondaryText}>Cancel</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2960,13 +3274,6 @@ All P&L, fees, and stats have been recalculated automatically.`
                       >
                         <Text style={styles.btnPrimaryText}>✓ App is Up to Date (Close)</Text>
                       </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.btnForceReinstall}
-                        onPress={handleDownloadAndInstallUpdate}
-                      >
-                        <Text style={styles.btnForceReinstallText}>Force Re-Download Package ({releaseInfo?.tag_name || APP_VERSION})</Text>
-                      </TouchableOpacity>
                     </>
                   ) : (
                     <>
@@ -3003,11 +3310,29 @@ All P&L, fees, and stats have been recalculated automatically.`
 
               {updateStatus === 'completed' && (
                 <View style={styles.updateActionsGrid}>
+                  <View style={styles.upToDateBox}>
+                    <Text style={styles.upToDateCheckIcon}>📦</Text>
+                    <Text style={styles.upToDateHeading}>Download Complete (100%)</Text>
+                    <Text style={styles.upToDateMessage}>
+                      TradeMind update package has been downloaded. Tap below to launch installation. All your data and login credentials remain 100% safe.
+                    </Text>
+                  </View>
+
                   <TouchableOpacity
                     style={[styles.btnPrimary, { backgroundColor: '#10b981' }]}
                     onPress={() => triggerApkInstall()}
                   >
                     <Text style={styles.btnPrimaryText}>🚀 Tap to Install Update Now</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.modalBtnCancel}
+                    onPress={async () => {
+                      const uri = downloadedApkUri || (FileSystem.cacheDirectory + 'TradeMind_Update.apk');
+                      await Sharing.shareAsync(uri, { mimeType: 'application/vnd.android.package-archive' });
+                    }}
+                  >
+                    <Text style={styles.modalBtnCancelText}>📂 Open with System Package Installer</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -3957,6 +4282,39 @@ const styles = StyleSheet.create({
   },
   updateActionsGrid: {
     gap: 10
+  },
+  deltaRegionToggle: {
+    gap: 8,
+    marginTop: 4
+  },
+  deltaRegionBtn: {
+    backgroundColor: '#070b14',
+    borderWidth: 1,
+    borderColor: '#334155',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8
+  },
+  deltaRegionBtnActive: {
+    borderColor: '#38bdf8',
+    backgroundColor: 'rgba(56, 189, 248, 0.12)'
+  },
+  deltaRegionBtnText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600'
+  },
+  exnessTextInput: {
+    backgroundColor: '#070b14',
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 10,
+    color: '#f8fafc',
+    padding: 12,
+    fontSize: 12,
+    minHeight: 120,
+    textAlignVertical: 'top',
+    marginBottom: 16
   },
   // Forgot Password & Auth Styles
   passwordLabelRow: {
